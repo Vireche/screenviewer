@@ -16,6 +16,7 @@ import (
 
 	"github.com/lxn/walk"
 	"github.com/lxn/win"
+	_ "golang.org/x/image/webp"
 )
 
 const browserPanelWidth = 110
@@ -23,7 +24,7 @@ const browserPanelWidth = 110
 const folderEntryPrefix = "📁 "
 
 var imageExtensions = map[string]bool{
-	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".bmp": true, ".webp": true,
 }
 
 // comCall calls a COM vtable method on an interface pointer.

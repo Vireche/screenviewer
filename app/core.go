@@ -1178,7 +1178,7 @@ func (app *viewerApp) handleDropFiles(hDrop win.HDROP) {
 
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
-	case ".png", ".jpg", ".jpeg", ".gif", ".bmp":
+	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp":
 	default:
 		app.setStatusText(fmt.Sprintf("Unsupported image format: %s", ext))
 		return

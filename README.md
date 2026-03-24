@@ -63,6 +63,7 @@ Supported file extensions for drag/browser are:
 - `.jpeg`
 - `.gif`
 - `.bmp`
+- `.webp`
 
 ## Fullscreen Image Behavior
 

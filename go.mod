@@ -1,6 +1,6 @@
 module screenviewer
 
-go 1.24.4
+go 1.25.0
 
 require (
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
@@ -12,6 +12,7 @@ require (
 	github.com/gen2brain/shm v0.1.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/jezek/xgb v1.1.1 // indirect
+	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 )
