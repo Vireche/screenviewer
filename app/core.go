@@ -21,16 +21,6 @@ import (
 	"github.com/lxn/win"
 )
 
-var (
-	modUser32Input       = syscall.NewLazyDLL("user32.dll")
-	procGetAsyncKeyState = modUser32Input.NewProc("GetAsyncKeyState")
-)
-
-func isVirtualKeyDown(vk int32) bool {
-	state, _, _ := procGetAsyncKeyState.Call(uintptr(vk))
-	return (state & 0x8000) != 0
-}
-
 const (
 	refreshInterval             = time.Second / 30
 	presentInterval             = time.Second / 15
@@ -86,9 +76,6 @@ type viewerApp struct {
 	cursorX                int
 	cursorY                int
 	cursorVisible          bool
-	lastLButtonDown        bool
-	lastRButtonDown        bool
-	lastMButtonDown        bool
 	lastCursorInvalidateAt time.Time
 	splitter               *walk.Splitter
 	browserPanel           *walk.Composite
@@ -1260,7 +1247,6 @@ func (app *viewerApp) showImageOnDisplay(img image.Image) {
 		win.SWP_NOMOVE|win.SWP_NOSIZE)
 	win.SetForegroundWindow(hwnd)
 	win.SetFocus(hwnd)
-	win.SetCapture(hwnd)
 
 	// Create a GDI bitmap for direct painting via StretchBlt.
 	hBmp := createHBitmapFromImage(img)
@@ -1353,9 +1339,6 @@ func (app *viewerApp) startCursorTracking() {
 					continue
 				}
 
-				lDown := isVirtualKeyDown(win.VK_LBUTTON)
-				rDown := isVirtualKeyDown(win.VK_RBUTTON)
-				mDown := isVirtualKeyDown(win.VK_MBUTTON)
 				app.stateMu.RLock()
 				display := app.displays[app.displayIndex]
 				app.stateMu.RUnlock()
@@ -1369,36 +1352,17 @@ func (app *viewerApp) startCursorTracking() {
 				positionChanged := onDisplay && (app.cursorX != int(pt.X) || app.cursorY != int(pt.Y))
 				changed := visibilityChanged || positionChanged
 				hasImageThumbnail := app.imageBitmap != nil
-				hasImageViewer := app.imageViewerHwnd != 0 && app.imageDisplayIndex >= 0 && app.imageDisplayIndex < len(app.displays)
-				clickPressed := (!app.lastLButtonDown && lDown) || (!app.lastRButtonDown && rDown) || (!app.lastMButtonDown && mDown)
-				imageDisplayHit := false
-				if hasImageViewer {
-					ib := app.displays[app.imageDisplayIndex].bounds
-					imageDisplayHit = int(pt.X) >= ib.Min.X && int(pt.X) < ib.Max.X && int(pt.Y) >= ib.Min.Y && int(pt.Y) < ib.Max.Y
-				}
 				app.cursorVisible = onDisplay
 				if onDisplay {
 					app.cursorX = int(pt.X)
 					app.cursorY = int(pt.Y)
 				}
-				app.lastLButtonDown = lDown
-				app.lastRButtonDown = rDown
-				app.lastMButtonDown = mDown
 				shouldInvalidate := changed && !hasImageThumbnail &&
 					(visibilityChanged || now.Sub(app.lastCursorInvalidateAt) >= cursorInvalidateInterval)
-				shouldCloseImageViewer := clickPressed && imageDisplayHit && hasImageViewer
 				if shouldInvalidate {
 					app.lastCursorInvalidateAt = now
 				}
 				app.stateMu.Unlock()
-
-				if shouldCloseImageViewer {
-					app.mainWindow.Synchronize(func() {
-						app.closeImageViewer()
-						_ = app.preview.Invalidate()
-					})
-					continue
-				}
 
 				if shouldInvalidate {
 					app.mainWindow.Synchronize(func() {
@@ -1426,7 +1390,6 @@ func (app *viewerApp) closeImageViewer() {
 	app.stateMu.Unlock()
 
 	if hwnd != 0 {
-		win.ReleaseCapture()
 		win.DestroyWindow(hwnd)
 	}
 	if bmp != nil {
