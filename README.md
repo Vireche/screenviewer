@@ -1,4 +1,4 @@
-# Screen Viewer
+# <img src="resources/appicon.png" alt="Screen Viewer logo" width="28" valign="middle" /> Screen Viewer
 
 Screen Viewer is a Windows desktop tool (Go + Walk) that mirrors one monitor inside a resizable control window and can also throw still images fullscreen onto the selected display.
 

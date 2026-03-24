@@ -145,6 +145,11 @@ func newViewerApp(displays []displayOption, selectedIndex int) (*viewerApp, erro
 		return nil, err
 	}
 
+	if icon, err := walk.NewIconFromFile("resources/windows/app.ico"); err == nil {
+		mainWindow.AddDisposable(icon)
+		_ = mainWindow.SetIcon(icon)
+	}
+
 	background, err := walk.NewSolidColorBrush(walk.RGB(24, 26, 31))
 	if err != nil {
 		mainWindow.Dispose()
