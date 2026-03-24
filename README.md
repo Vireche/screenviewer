@@ -2,6 +2,8 @@
 
 Screen Viewer is a Windows desktop tool (Go + Walk) that mirrors one monitor inside a resizable control window and can also throw still images fullscreen onto the selected display.
 
+I created this for personal use, I play table top RPGs like Pathfinder and D&D.  I have a monitor facing the players and show pictures of the NPCs, monsters and other notable things on the second monitor, but since I couldn't see the monitor I ended up dragging pictures to somewhere I can't see or creating a power point and using it to display the images.  This was all a bit clunky so I wrote this app.
+
 ## Requirements
 
 - Windows with at least two active displays
@@ -78,7 +80,6 @@ Supported file extensions for drag/browser are:
 - "Browse Folder..." opens a folder picker.
 - Lists detected image files in that folder.
 - Single-clicking an item immediately opens it fullscreen on the selected display.
-- The panel is kept narrow and the preview area gets most of the horizontal space.
 
 ## Window Drag-To-Display Mode
 
@@ -87,11 +88,6 @@ When `View > Drag window to display` is enabled:
 - Drag any other app window so the cursor ends over Screen Viewer, then release.
 - Screen Viewer detects the move-end event and relocates that window to the selected display.
 - The dropped window is then maximized on that display.
-
-## Performance Notes
-
-- Large source images are downsampled to the target display size before fullscreen presentation for faster loading and smoother interaction.
-- Frame presentation is throttled and duplicate-frame detection is used to reduce unnecessary redraw work.
 
 ## Native Resource Notes
 
