@@ -16,7 +16,7 @@ go run .
 ## Build
 
 ```powershell
-go build .
+build.bat
 ```
 
 ## What It Does
@@ -66,9 +66,9 @@ Supported file extensions for drag/browser are:
 
 ## Fullscreen Image Behavior
 
-- The fullscreen image is shown in a borderless topmost window on the selected display.
+- The fullscreen image is shown in a borderless window on the selected display and is raised above regular windows when opened.
 - The image is scaled to fit while preserving aspect ratio and letterboxing as needed.
-- Click anywhere in the fullscreen image window, right-click, or press any key to close it.
+- Click on the fullscreen image monitor (left/right/middle) to close it, or press any key while the fullscreen window has focus.
 - While active, the main preview shows a bottom-right thumbnail card with a red `X` close button.
 
 ## Image Browser Panel
@@ -94,5 +94,5 @@ When `View > Drag window to display` is enabled:
 
 ## Native Resource Notes
 
-The Windows UI behavior depends on embedded resources in `screenviewer.manifest` and `rsrc.syso`.
-These files are already included, so both `go run .` and `go build .` start correctly.
+The Windows UI behavior depends on embedded resources in `resources/windows/screenviewer.manifest` and `resources/windows/rsrc.syso`.
+`build.bat` stages `rsrc.syso` into the module root for linking, builds `screenviewer.exe`, then removes the staged copy.

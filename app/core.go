@@ -21,16 +21,28 @@ import (
 	"github.com/lxn/win"
 )
 
+var (
+	modUser32Input       = syscall.NewLazyDLL("user32.dll")
+	procGetAsyncKeyState = modUser32Input.NewProc("GetAsyncKeyState")
+)
+
+func isVirtualKeyDown(vk int32) bool {
+	state, _, _ := procGetAsyncKeyState.Call(uintptr(vk))
+	return (state & 0x8000) != 0
+}
+
 const (
-	refreshInterval   = time.Second / 30
-	presentInterval   = time.Second / 15
-	windowTitle       = "Monitor Viewer"
-	maxInitialWidth   = 1280
-	maxInitialHeight  = 720
-	statusAreaHeight  = 32
-	defaultMinWidth   = 480
-	defaultMinHeight  = 320
-	windowResizeFlags = win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOACTIVATE
+	refreshInterval             = time.Second / 30
+	presentInterval             = time.Second / 15
+	cursorInvalidateInterval    = time.Second / 24
+	cursorSignatureIgnoreRadius = 24
+	windowTitle                 = "Monitor Viewer"
+	maxInitialWidth             = 1280
+	maxInitialHeight            = 720
+	statusAreaHeight            = 32
+	defaultMinWidth             = 480
+	defaultMinHeight            = 320
+	windowResizeFlags           = win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOACTIVATE
 )
 
 type displayOption struct {
@@ -40,48 +52,53 @@ type displayOption struct {
 }
 
 type viewerApp struct {
-	mainWindow        *walk.MainWindow
-	preview           *walk.CustomWidget
-	statusLabel       *walk.Label
-	background        *walk.SolidColorBrush
-	displays          []displayOption
-	displayActions    []*walk.Action
-	displayIndex      int
-	alwaysOnTop       bool
-	currentBitmap     *walk.Bitmap
-	previousBitmap    *walk.Bitmap
-	currentFrame      walk.Size
-	statusText        string
-	lastClientSize    walk.Size
-	adjustingSize     bool
-	lastPresentAt     time.Time
-	lastFrameSig      uint64
-	haveFrameSig      bool
-	captureTrigger    chan struct{}
-	stopCapture       chan struct{}
-	stopOnce          sync.Once
-	stateMu           sync.RWMutex
-	moveSizeHook      win.HWINEVENTHOOK
-	windowDropEnabled bool
-	origWndProc       uintptr
-	imageViewerHwnd   win.HWND
-	imageDisplayIndex int
-	imageBitmap       *walk.Bitmap
-	imageSize         walk.Size
-	imageFileName     string
-	closeBtnRect      walk.Rectangle
-	cursorX           int
-	cursorY           int
-	cursorVisible     bool
-	splitter          *walk.Splitter
-	browserPanel      *walk.Composite
-	imageList         *walk.ListBox
-	browserFilter     *walk.LineEdit
-	browserDir        string
-	browserAllFiles   []string
-	browserAllIsDirs  []bool
-	browserFiles      []string
-	browserItemIsDirs []bool
+	mainWindow             *walk.MainWindow
+	preview                *walk.CustomWidget
+	statusLabel            *walk.Label
+	background             *walk.SolidColorBrush
+	displays               []displayOption
+	displayActions         []*walk.Action
+	displayIndex           int
+	alwaysOnTop            bool
+	currentBitmap          *walk.Bitmap
+	previousBitmap         *walk.Bitmap
+	currentFrame           walk.Size
+	statusText             string
+	lastClientSize         walk.Size
+	adjustingSize          bool
+	lastPresentAt          time.Time
+	lastFrameSig           uint64
+	haveFrameSig           bool
+	captureTrigger         chan struct{}
+	stopCapture            chan struct{}
+	stopOnce               sync.Once
+	stateMu                sync.RWMutex
+	moveSizeHook           win.HWINEVENTHOOK
+	windowDropEnabled      bool
+	origWndProc            uintptr
+	imageWndProc           uintptr
+	imageViewerHwnd        win.HWND
+	imageDisplayIndex      int
+	imageBitmap            *walk.Bitmap
+	imageSize              walk.Size
+	imageFileName          string
+	closeBtnRect           walk.Rectangle
+	cursorX                int
+	cursorY                int
+	cursorVisible          bool
+	lastLButtonDown        bool
+	lastRButtonDown        bool
+	lastMButtonDown        bool
+	lastCursorInvalidateAt time.Time
+	splitter               *walk.Splitter
+	browserPanel           *walk.Composite
+	imageList              *walk.ListBox
+	browserFilter          *walk.LineEdit
+	browserDir             string
+	browserAllFiles        []string
+	browserAllIsDirs       []bool
+	browserFiles           []string
+	browserItemIsDirs      []bool
 }
 
 func Run() {
@@ -446,7 +463,16 @@ func (app *viewerApp) captureFrame() {
 	app.stateMu.RLock()
 	display := app.displays[app.displayIndex]
 	alwaysOnTop := app.alwaysOnTop
+	hasImageThumbnail := app.imageBitmap != nil
+	cursorVisible := app.cursorVisible
+	cursorX := app.cursorX
+	cursorY := app.cursorY
 	app.stateMu.RUnlock()
+
+	// Keep preview stable while fullscreen image mode is active.
+	if hasImageThumbnail {
+		return
+	}
 
 	frame, err := screenshot.CaptureDisplay(display.index)
 	if err != nil {
@@ -459,7 +485,20 @@ func (app *viewerApp) captureFrame() {
 	// Normalize to a zero-origin image to avoid partial rendering issues with non-zero bounds.
 	frame = normalizeRGBA(frame)
 
-	frameSig := sampleFrameSignature(frame)
+	var ignoreRect *image.Rectangle
+	if cursorVisible {
+		relX := cursorX - display.bounds.Min.X
+		relY := cursorY - display.bounds.Min.Y
+		if relX >= 0 && relX < frame.Bounds().Dx() && relY >= 0 && relY < frame.Bounds().Dy() {
+			r := cursorSignatureIgnoreRadius
+			ir := image.Rect(relX-r, relY-r, relX+r+1, relY+r+1).Intersect(frame.Bounds())
+			if !ir.Empty() {
+				ignoreRect = &ir
+			}
+		}
+	}
+
+	frameSig := sampleFrameSignature(frame, ignoreRect)
 	now := time.Now()
 	app.stateMu.Lock()
 	sameFrame := app.haveFrameSig && frameSig == app.lastFrameSig
@@ -740,7 +779,7 @@ func (app *viewerApp) paintPreview(canvas *walk.Canvas, updateBounds walk.Rectan
 	dispBounds := app.displays[app.displayIndex].bounds
 	app.stateMu.RUnlock()
 
-	if cursorVisible && dst.Width > 0 && dst.Height > 0 {
+	if imgBmp == nil && cursorVisible && dst.Width > 0 && dst.Height > 0 {
 		relX := float64(cursorX-dispBounds.Min.X) / float64(dispBounds.Dx())
 		relY := float64(cursorY-dispBounds.Min.Y) / float64(dispBounds.Dy())
 		px := dst.X + int(math.Round(relX*float64(dst.Width)))
@@ -879,7 +918,7 @@ func fitRect(source walk.Size, target walk.Rectangle) walk.Rectangle {
 	return walk.Rectangle{X: offsetX, Y: offsetY, Width: drawW, Height: drawH}
 }
 
-func sampleFrameSignature(frame *image.RGBA) uint64 {
+func sampleFrameSignature(frame *image.RGBA, ignoreRect *image.Rectangle) uint64 {
 	bounds := frame.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
@@ -899,6 +938,10 @@ func sampleFrameSignature(frame *image.RGBA) uint64 {
 			x := bounds.Min.X + (xStep*width)/9
 			if x >= bounds.Max.X {
 				x = bounds.Max.X - 1
+			}
+			if ignoreRect != nil && x >= ignoreRect.Min.X && x < ignoreRect.Max.X &&
+				y >= ignoreRect.Min.Y && y < ignoreRect.Max.Y {
+				continue
 			}
 			offset := frame.PixOffset(x, y)
 			if offset+2 >= len(frame.Pix) {
@@ -1210,6 +1253,9 @@ func (app *viewerApp) showImageOnDisplay(img image.Image) {
 	// Raise above regular windows once, without making it permanently topmost.
 	win.SetWindowPos(hwnd, win.HWND_TOP, 0, 0, 0, 0,
 		win.SWP_NOMOVE|win.SWP_NOSIZE)
+	win.SetForegroundWindow(hwnd)
+	win.SetFocus(hwnd)
+	win.SetCapture(hwnd)
 
 	// Create a GDI bitmap for direct painting via StretchBlt.
 	hBmp := createHBitmapFromImage(img)
@@ -1221,58 +1267,67 @@ func (app *viewerApp) showImageOnDisplay(img image.Image) {
 	procFillRect := syscall.NewLazyDLL("user32.dll").NewProc("FillRect")
 
 	var origStaticProc uintptr
-	origStaticProc = win.SetWindowLongPtr(hwnd, win.GWLP_WNDPROC,
-		syscall.NewCallback(func(h win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
-			switch msg {
-			case win.WM_PAINT:
-				var ps win.PAINTSTRUCT
-				hdc := win.BeginPaint(h, &ps)
-				if hdc == 0 {
-					return 0
-				}
+	imageWndProc := syscall.NewCallback(func(h win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
+		switch msg {
+		case win.WM_NCHITTEST:
+			// Keep input on this fullscreen window (do not pass through).
+			return uintptr(win.HTCLIENT)
 
-				// Fill background black.
-				blackBrush := win.HBRUSH(win.GetStockObject(win.BLACK_BRUSH))
-				bgRect := &win.RECT{Left: 0, Top: 0, Right: int32(dispW), Bottom: int32(dispH)}
-				procFillRect.Call(uintptr(hdc), uintptr(unsafe.Pointer(bgRect)), uintptr(blackBrush))
+		case win.WM_ERASEBKGND:
+			// We paint the full surface in WM_PAINT.
+			return 1
 
-				// Draw image scaled to fit using StretchBlt.
-				if hBmp != 0 {
-					dst := fitRect(
-						walk.Size{Width: imgW, Height: imgH},
-						walk.Rectangle{X: 0, Y: 0, Width: dispW, Height: dispH},
-					)
-					hdcMem := win.CreateCompatibleDC(hdc)
-					oldObj := win.SelectObject(hdcMem, win.HGDIOBJ(hBmp))
-					win.SetStretchBltMode(hdc, win.HALFTONE)
-					win.StretchBlt(hdc,
-						int32(dst.X), int32(dst.Y), int32(dst.Width), int32(dst.Height),
-						hdcMem,
-						0, 0, int32(imgW), int32(imgH),
-						win.SRCCOPY)
-					win.SelectObject(hdcMem, oldObj)
-					win.DeleteDC(hdcMem)
-				}
-
-				win.EndPaint(h, &ps)
-				return 0
-
-			case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_KEYDOWN:
-				// Any click or keypress closes the viewer.
-				app.mainWindow.Synchronize(func() {
-					app.closeImageViewer()
-					_ = app.preview.Invalidate()
-				})
-				return 0
-
-			case win.WM_DESTROY:
-				if hBmp != 0 {
-					win.DeleteObject(win.HGDIOBJ(hBmp))
-				}
+		case win.WM_PAINT:
+			var ps win.PAINTSTRUCT
+			hdc := win.BeginPaint(h, &ps)
+			if hdc == 0 {
 				return 0
 			}
-			return win.CallWindowProc(origStaticProc, h, msg, wParam, lParam)
-		}))
+
+			// Fill background black.
+			blackBrush := win.HBRUSH(win.GetStockObject(win.BLACK_BRUSH))
+			bgRect := &win.RECT{Left: 0, Top: 0, Right: int32(dispW), Bottom: int32(dispH)}
+			procFillRect.Call(uintptr(hdc), uintptr(unsafe.Pointer(bgRect)), uintptr(blackBrush))
+
+			// Draw image scaled to fit using StretchBlt.
+			if hBmp != 0 {
+				dst := fitRect(
+					walk.Size{Width: imgW, Height: imgH},
+					walk.Rectangle{X: 0, Y: 0, Width: dispW, Height: dispH},
+				)
+				hdcMem := win.CreateCompatibleDC(hdc)
+				oldObj := win.SelectObject(hdcMem, win.HGDIOBJ(hBmp))
+				win.SetStretchBltMode(hdc, win.HALFTONE)
+				win.StretchBlt(hdc,
+					int32(dst.X), int32(dst.Y), int32(dst.Width), int32(dst.Height),
+					hdcMem,
+					0, 0, int32(imgW), int32(imgH),
+					win.SRCCOPY)
+				win.SelectObject(hdcMem, oldObj)
+				win.DeleteDC(hdcMem)
+			}
+
+			win.EndPaint(h, &ps)
+			return 0
+
+		case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN, win.WM_KEYDOWN, win.WM_SYSKEYDOWN:
+			// Any click or keypress closes the viewer.
+			app.closeImageViewer()
+			_ = app.preview.Invalidate()
+			return 0
+
+		case win.WM_DESTROY:
+			if hBmp != 0 {
+				win.DeleteObject(win.HGDIOBJ(hBmp))
+			}
+			return 0
+		}
+		return win.CallWindowProc(origStaticProc, h, msg, wParam, lParam)
+	})
+	app.stateMu.Lock()
+	app.imageWndProc = imageWndProc
+	app.stateMu.Unlock()
+	origStaticProc = win.SetWindowLongPtr(hwnd, win.GWLP_WNDPROC, imageWndProc)
 
 	win.InvalidateRect(hwnd, nil, true)
 }
@@ -1287,10 +1342,15 @@ func (app *viewerApp) startCursorTracking() {
 		for {
 			select {
 			case <-ticker.C:
+				now := time.Now()
 				var pt win.POINT
 				if !win.GetCursorPos(&pt) {
 					continue
 				}
+
+				lDown := isVirtualKeyDown(win.VK_LBUTTON)
+				rDown := isVirtualKeyDown(win.VK_RBUTTON)
+				mDown := isVirtualKeyDown(win.VK_MBUTTON)
 				app.stateMu.RLock()
 				display := app.displays[app.displayIndex]
 				app.stateMu.RUnlock()
@@ -1300,16 +1360,42 @@ func (app *viewerApp) startCursorTracking() {
 					int(pt.Y) >= b.Min.Y && int(pt.Y) < b.Max.Y
 
 				app.stateMu.Lock()
-				changed := app.cursorVisible != onDisplay ||
-					(onDisplay && (app.cursorX != int(pt.X) || app.cursorY != int(pt.Y)))
+				visibilityChanged := app.cursorVisible != onDisplay
+				positionChanged := onDisplay && (app.cursorX != int(pt.X) || app.cursorY != int(pt.Y))
+				changed := visibilityChanged || positionChanged
+				hasImageThumbnail := app.imageBitmap != nil
+				hasImageViewer := app.imageViewerHwnd != 0 && app.imageDisplayIndex >= 0 && app.imageDisplayIndex < len(app.displays)
+				clickPressed := (!app.lastLButtonDown && lDown) || (!app.lastRButtonDown && rDown) || (!app.lastMButtonDown && mDown)
+				imageDisplayHit := false
+				if hasImageViewer {
+					ib := app.displays[app.imageDisplayIndex].bounds
+					imageDisplayHit = int(pt.X) >= ib.Min.X && int(pt.X) < ib.Max.X && int(pt.Y) >= ib.Min.Y && int(pt.Y) < ib.Max.Y
+				}
 				app.cursorVisible = onDisplay
 				if onDisplay {
 					app.cursorX = int(pt.X)
 					app.cursorY = int(pt.Y)
 				}
+				app.lastLButtonDown = lDown
+				app.lastRButtonDown = rDown
+				app.lastMButtonDown = mDown
+				shouldInvalidate := changed && !hasImageThumbnail &&
+					(visibilityChanged || now.Sub(app.lastCursorInvalidateAt) >= cursorInvalidateInterval)
+				shouldCloseImageViewer := clickPressed && imageDisplayHit && hasImageViewer
+				if shouldInvalidate {
+					app.lastCursorInvalidateAt = now
+				}
 				app.stateMu.Unlock()
 
-				if changed {
+				if shouldCloseImageViewer {
+					app.mainWindow.Synchronize(func() {
+						app.closeImageViewer()
+						_ = app.preview.Invalidate()
+					})
+					continue
+				}
+
+				if shouldInvalidate {
 					app.mainWindow.Synchronize(func() {
 						_ = app.preview.Invalidate()
 					})
@@ -1325,6 +1411,7 @@ func (app *viewerApp) closeImageViewer() {
 	app.stateMu.Lock()
 	hwnd := app.imageViewerHwnd
 	app.imageViewerHwnd = 0
+	app.imageWndProc = 0
 	app.imageDisplayIndex = -1
 	bmp := app.imageBitmap
 	app.imageBitmap = nil
@@ -1334,11 +1421,13 @@ func (app *viewerApp) closeImageViewer() {
 	app.stateMu.Unlock()
 
 	if hwnd != 0 {
+		win.ReleaseCapture()
 		win.DestroyWindow(hwnd)
 	}
 	if bmp != nil {
 		bmp.Dispose()
 	}
+	app.captureSoon()
 }
 
 func (app *viewerApp) handlePreviewClick(x, y int) {
