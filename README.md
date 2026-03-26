@@ -30,8 +30,6 @@ build.bat
 - Supports dropping image files onto the control window to show them fullscreen on the selected display.
 - Supports pasting an image from the clipboard (`Ctrl+V`) to show it fullscreen on the selected display.
 - Includes a toggleable Image Browser panel for selecting and launching images from a folder.
-- Shows a thumbnail overlay in the preview when a fullscreen image is active, with a clickable close button.
-- Supports "Drag window to display" mode that moves and maximizes another app window onto the selected display when you drop it over the viewer.
 
 ## Menus And Controls
 
@@ -46,7 +44,6 @@ build.bat
 ### View
 
 - `Always on top`: Keep the control window above other windows.
-- `Drag window to display`: Enable drag-and-drop window relocation to the selected display.
 - `Image browser`: Show/hide the left browser panel.
 - `Display N (...)`: Switch the monitored/target display.
 
@@ -80,14 +77,6 @@ Supported file extensions for drag/browser are:
 - "Browse Folder..." opens a folder picker.
 - Lists detected image files in that folder.
 - Single-clicking an item immediately opens it fullscreen on the selected display.
-
-## Window Drag-To-Display Mode
-
-When `View > Drag window to display` is enabled:
-
-- Drag any other app window so the cursor ends over Screen Viewer, then release.
-- Screen Viewer detects the move-end event and relocates that window to the selected display.
-- The dropped window is then maximized on that display.
 
 ## Native Resource Notes
 

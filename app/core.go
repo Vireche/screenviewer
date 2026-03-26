@@ -63,8 +63,6 @@ type viewerApp struct {
 	stopCapture            chan struct{}
 	stopOnce               sync.Once
 	stateMu                sync.RWMutex
-	moveSizeHook           win.HWINEVENTHOOK
-	windowDropEnabled      bool
 	origWndProc            uintptr
 	imageWndProc           uintptr
 	imageViewerHwnd        win.HWND
@@ -285,7 +283,6 @@ func newViewerApp(displays []displayOption, selectedIndex int) (*viewerApp, erro
 		return nil, err
 	}
 	app.installAspectRatioLock()
-	app.installWindowDropHook()
 	app.enableFileDrop()
 
 	mainWindow.Closing().Attach(func(canceled *bool, reason walk.CloseReason) {
@@ -369,20 +366,6 @@ func (app *viewerApp) configureMenus() error {
 		app.toggleAlwaysOnTop(alwaysOnTopAction.Checked())
 	})
 	if err := viewMenu.Actions().Add(alwaysOnTopAction); err != nil {
-		return err
-	}
-
-	windowDropAction := walk.NewAction()
-	if err := windowDropAction.SetText("&Drag window to display"); err != nil {
-		return err
-	}
-	if err := windowDropAction.SetCheckable(true); err != nil {
-		return err
-	}
-	windowDropAction.Triggered().Attach(func() {
-		app.toggleWindowDrop(windowDropAction.Checked())
-	})
-	if err := viewMenu.Actions().Add(windowDropAction); err != nil {
 		return err
 	}
 
@@ -592,12 +575,6 @@ func (app *viewerApp) toggleAlwaysOnTop(enabled bool) {
 	app.captureSoon()
 }
 
-func (app *viewerApp) toggleWindowDrop(enabled bool) {
-	app.stateMu.Lock()
-	app.windowDropEnabled = enabled
-	app.stateMu.Unlock()
-}
-
 func (app *viewerApp) toggleImageBrowser(visible bool) {
 	app.browserPanel.SetVisible(visible)
 	if visible && len(app.browserFiles) == 0 {
@@ -634,10 +611,6 @@ func (app *viewerApp) resizeWindowForDisplay(display displayOption) error {
 
 func (app *viewerApp) shutdown() {
 	app.stopOnce.Do(func() {
-		if app.moveSizeHook != 0 {
-			win.UnhookWinEvent(app.moveSizeHook)
-			app.moveSizeHook = 0
-		}
 		app.closeImageViewer()
 		close(app.stopCapture)
 		app.mainWindow.Synchronize(func() {
@@ -1059,83 +1032,6 @@ func absInt(value int) int {
 	}
 
 	return value
-}
-
-// installWindowDropHook sets up a system-wide event hook that detects when a
-// window finishes being dragged over the viewer. If so, it moves that window
-// to the monitored display and maximizes it.
-func (app *viewerApp) installWindowDropHook() {
-	var modUser32 = syscall.NewLazyDLL("user32.dll")
-	var procGetWindowThreadProcessId = modUser32.NewProc("GetWindowThreadProcessId")
-
-	callback := func(hWinEventHook win.HWINEVENTHOOK, event uint32, hwnd win.HWND, idObject int32, idChild int32, idEventThread uint32, dwmsEventTime uint32) uintptr {
-		if event != win.EVENT_SYSTEM_MOVESIZEEND {
-			return 0
-		}
-		app.stateMu.RLock()
-		enabled := app.windowDropEnabled
-		app.stateMu.RUnlock()
-		if !enabled {
-			return 0
-		}
-		if hwnd == 0 || hwnd == app.mainWindow.Handle() {
-			return 0
-		}
-
-		// Check that the cursor is over the viewer window.
-		var cursor win.POINT
-		if !win.GetCursorPos(&cursor) {
-			return 0
-		}
-		viewerHwnd := app.mainWindow.Handle()
-		var viewerRect win.RECT
-		if !win.GetWindowRect(viewerHwnd, &viewerRect) {
-			return 0
-		}
-		if cursor.X < viewerRect.Left || cursor.X > viewerRect.Right ||
-			cursor.Y < viewerRect.Top || cursor.Y > viewerRect.Bottom {
-			return 0
-		}
-
-		// Get the top-level owner of the dropped window.
-		topLevel := win.GetAncestor(hwnd, win.GA_ROOT)
-		if topLevel == 0 {
-			topLevel = hwnd
-		}
-		if topLevel == viewerHwnd {
-			return 0
-		}
-
-		// Ensure the window belongs to another process (not us).
-		var pid uint32
-		procGetWindowThreadProcessId.Call(uintptr(topLevel), uintptr(unsafe.Pointer(&pid)))
-
-		// Move to the monitored display and maximize.
-		app.stateMu.RLock()
-		display := app.displays[app.displayIndex]
-		app.stateMu.RUnlock()
-
-		bounds := display.bounds
-		win.SetWindowPos(topLevel, 0,
-			int32(bounds.Min.X), int32(bounds.Min.Y),
-			int32(bounds.Dx()), int32(bounds.Dy()),
-			win.SWP_NOZORDER|win.SWP_NOACTIVATE)
-		win.ShowWindow(topLevel, win.SW_MAXIMIZE)
-
-		return 0
-	}
-
-	hook, err := win.SetWinEventHook(
-		win.EVENT_SYSTEM_MOVESIZEEND,
-		win.EVENT_SYSTEM_MOVESIZEEND,
-		0,
-		callback,
-		0, 0,
-		win.WINEVENT_OUTOFCONTEXT,
-	)
-	if err == nil && hook != 0 {
-		app.moveSizeHook = hook
-	}
 }
 
 // enableFileDrop enables file drag-and-drop on the main window and subclasses
