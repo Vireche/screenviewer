@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/lxn/walk"
 	"github.com/lxn/win"
 	_ "golang.org/x/image/webp"
 )
@@ -29,6 +28,9 @@ var imageExtensions = map[string]bool{
 
 // comCall calls a COM vtable method on an interface pointer.
 func comCall(obj uintptr, methodIndex uintptr, args ...uintptr) uintptr {
+	if obj == 0 {
+		return 1 // Return error code for nil pointer
+	}
 	vtbl := *(*uintptr)(unsafe.Pointer(obj))
 	method := *(*uintptr)(unsafe.Pointer(vtbl + methodIndex*unsafe.Sizeof(uintptr(0))))
 	ret, _, _ := syscall.SyscallN(method, append([]uintptr{obj}, args...)...)
@@ -59,9 +61,12 @@ func pickFolderDialog(owner win.HWND, title string) (string, bool) {
 		idxGetResult  = 20
 	)
 
-	// Get current options and add FOS_PICKFOLDERS (0x20).
 	var opts uint32
-	comCall(obj, idxGetOptions, uintptr(unsafe.Pointer(&opts)))
+	if comCall(obj, idxGetOptions, uintptr(unsafe.Pointer(&opts))) != 0 {
+		// If getting options fails, the COM object is likely invalid
+		comCall(obj, 2) // Release and return
+		return "", false
+	}
 	comCall(obj, idxSetOptions, uintptr(opts|0x20))
 
 	if title != "" {
@@ -205,33 +210,7 @@ func (app *viewerApp) openSelectedImage() {
 		return
 	}
 
-	origW := img.Bounds().Dx()
-	origH := img.Bounds().Dy()
-
-	// Downsample to target display resolution for the fullscreen window.
-	app.stateMu.RLock()
-	dispBounds := app.displays[app.displayIndex].bounds
-	app.stateMu.RUnlock()
-	scaled := downsampleImage(img, dispBounds.Dx(), dispBounds.Dy())
-	img = nil // allow GC of original
-
-	bmp, err := walk.NewBitmapFromImage(scaled)
-	if err != nil {
-		app.setStatusText(fmt.Sprintf("Failed to create bitmap: %v", err))
-		return
-	}
-
-	app.closeImageViewer()
-
-	app.stateMu.Lock()
-	app.imageBitmap = bmp
-	app.imageSize = walk.Size{Width: origW, Height: origH}
-	app.imageFileName = app.browserFiles[idx]
-	app.stateMu.Unlock()
-
-	app.showImageOnDisplay(scaled)
-	_ = app.preview.Invalidate()
-	app.setStatusText(fmt.Sprintf("Showing %s on display", app.browserFiles[idx]))
+	app.addImage(img, img.Bounds().Dx(), img.Bounds().Dy(), app.browserFiles[idx])
 }
 
 func loadImageFile(path string) (image.Image, error) {

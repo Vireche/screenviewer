@@ -44,6 +44,7 @@ build.bat
 ### View
 
 - `Always on top`: Keep the control window above other windows.
+- `Allow multiple images`: Toggle single-image or multi-image mode. When enabled, you can display up to 9 images simultaneously in a tiled grid on the fullscreen display. When disabled (default), only one image displays at a time.
 - `Image browser`: Show/hide the left browser panel.
 - `Display N (...)`: Switch the monitored/target display.
 
@@ -66,10 +67,21 @@ Supported file extensions for drag/browser are:
 
 ## Fullscreen Image Behavior
 
+**Single-image mode (default):**
 - The fullscreen image is shown in a borderless window on the selected display and is raised above regular windows when opened.
 - The image is scaled to fit while preserving aspect ratio and letterboxing as needed.
-- Click on the fullscreen image monitor (left/right/middle) to close it, or press any key while the fullscreen window has focus.
+- Click on the fullscreen image (left/right/middle) to close it, or press any key while the fullscreen window has focus.
 - While active, the main preview shows a bottom-right thumbnail card with a red `X` close button.
+
+**Multi-image mode** (when "Allow multiple images" is enabled):
+- Up to 9 images can be displayed simultaneously in a tiled grid layout on the fullscreen display.
+- Grid layouts adapt to the number of images: 1 image (1×1), 2 images (2×1), 3-4 images (2×2), 5-6 images (3×2), 7-8 images (4×2), 9 images (3×3).
+- Each image is scaled to fit its grid section while preserving aspect ratio.
+- The main preview shows thumbnail cards for all active images in a right-aligned strip at the bottom, dynamically scaled to fit available window width.
+- Each thumbnail has a red `X` close button to remove that specific image.
+- Adding a duplicate image removes the old copy and shows the new one (refreshing its position).
+- When the limit of 9 images is reached, adding another image removes the oldest one (FIFO eviction).
+- Click on any image in the fullscreen grid to close it, or press any key to close all images.
 
 ## Image Browser Panel
 

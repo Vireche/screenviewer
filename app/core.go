@@ -33,12 +33,33 @@ const (
 	defaultMinWidth             = 480
 	defaultMinHeight            = 320
 	windowResizeFlags           = win.SWP_NOMOVE | win.SWP_NOSIZE | win.SWP_NOACTIVATE
+	maxImages                   = 9
 )
 
 type displayOption struct {
 	index  int
 	bounds image.Rectangle
 	label  string
+}
+
+type imageSlot struct {
+	walkBitmap *walk.Bitmap
+	origSize   walk.Size
+	fileName   string
+	hBmp       win.HBITMAP
+	imgW       int
+	imgH       int
+}
+
+func (slot *imageSlot) dispose() {
+	if slot.hBmp != 0 {
+		win.DeleteObject(win.HGDIOBJ(slot.hBmp))
+		slot.hBmp = 0
+	}
+	if slot.walkBitmap != nil {
+		slot.walkBitmap.Dispose()
+		slot.walkBitmap = nil
+	}
 }
 
 type viewerApp struct {
@@ -63,14 +84,13 @@ type viewerApp struct {
 	stopCapture            chan struct{}
 	stopOnce               sync.Once
 	stateMu                sync.RWMutex
+	allowMultipleImages    bool
 	origWndProc            uintptr
 	imageWndProc           uintptr
 	imageViewerHwnd        win.HWND
 	imageDisplayIndex      int
-	imageBitmap            *walk.Bitmap
-	imageSize              walk.Size
-	imageFileName          string
-	closeBtnRect           walk.Rectangle
+	imageSlots             []imageSlot
+	thumbCloseRects        []walk.Rectangle
 	cursorX                int
 	cursorY                int
 	cursorVisible          bool
@@ -383,6 +403,22 @@ func (app *viewerApp) configureMenus() error {
 		return err
 	}
 
+	allowMultipleAction := walk.NewAction()
+	if err := allowMultipleAction.SetText("Allow &multiple images"); err != nil {
+		return err
+	}
+	if err := allowMultipleAction.SetCheckable(true); err != nil {
+		return err
+	}
+	allowMultipleAction.Triggered().Attach(func() {
+		app.stateMu.Lock()
+		app.allowMultipleImages = allowMultipleAction.Checked()
+		app.stateMu.Unlock()
+	})
+	if err := viewMenu.Actions().Add(allowMultipleAction); err != nil {
+		return err
+	}
+
 	if err := viewMenu.Actions().Add(walk.NewSeparatorAction()); err != nil {
 		return err
 	}
@@ -438,16 +474,10 @@ func (app *viewerApp) captureFrame() {
 	app.stateMu.RLock()
 	display := app.displays[app.displayIndex]
 	alwaysOnTop := app.alwaysOnTop
-	hasImageThumbnail := app.imageBitmap != nil
 	cursorVisible := app.cursorVisible
 	cursorX := app.cursorX
 	cursorY := app.cursorY
 	app.stateMu.RUnlock()
-
-	// Keep preview stable while fullscreen image mode is active.
-	if hasImageThumbnail {
-		return
-	}
 
 	frame, err := screenshot.CaptureDisplay(display.index)
 	if err != nil {
@@ -723,15 +753,14 @@ func (app *viewerApp) paintPreview(canvas *walk.Canvas, updateBounds walk.Rectan
 		}
 	}
 
-	// Draw image thumbnail overlay if an image is being shown on the display.
+	// Draw thumbnail strip if images are being shown on the display.
 	app.stateMu.RLock()
-	imgBmp := app.imageBitmap
-	imgSize := app.imageSize
-	imgName := app.imageFileName
+	slots := make([]imageSlot, len(app.imageSlots))
+	copy(slots, app.imageSlots)
 	app.stateMu.RUnlock()
 
-	if imgBmp != nil && imgSize.Width > 0 && imgSize.Height > 0 {
-		if err := app.paintImageThumbnail(canvas, localBounds, imgBmp, imgSize, imgName); err != nil {
+	if len(slots) > 0 {
+		if err := app.paintThumbnailStrip(canvas, localBounds, slots); err != nil {
 			return err
 		}
 	}
@@ -744,7 +773,7 @@ func (app *viewerApp) paintPreview(canvas *walk.Canvas, updateBounds walk.Rectan
 	dispBounds := app.displays[app.displayIndex].bounds
 	app.stateMu.RUnlock()
 
-	if imgBmp == nil && cursorVisible && dst.Width > 0 && dst.Height > 0 {
+	if len(slots) == 0 && cursorVisible && dst.Width > 0 && dst.Height > 0 {
 		relX := float64(cursorX-dispBounds.Min.X) / float64(dispBounds.Dx())
 		relY := float64(cursorY-dispBounds.Min.Y) / float64(dispBounds.Dy())
 		px := dst.X + int(math.Round(relX*float64(dst.Width)))
@@ -789,74 +818,121 @@ func (app *viewerApp) paintPreview(canvas *walk.Canvas, updateBounds walk.Rectan
 }
 
 const (
-	thumbnailMaxWidth  = 320
-	thumbnailMaxHeight = 240
-	thumbnailPadding   = 10
-	closeBtnSize       = 24
+	thumbnailMaxW    = 120
+	thumbnailMaxH    = 90
+	thumbnailMinW    = 60
+	thumbnailPad     = 5
+	thumbnailCloseSz = 14
 )
 
-func (app *viewerApp) paintImageThumbnail(canvas *walk.Canvas, bounds walk.Rectangle, bmp *walk.Bitmap, imgSize walk.Size, name string) error {
-	// Calculate thumbnail size maintaining aspect ratio.
-	thumbW, thumbH := fitWindow(imgSize.Width, imgSize.Height, thumbnailMaxWidth, thumbnailMaxHeight)
-
-	// Position in bottom-right corner with padding.
-	cardW := thumbW + thumbnailPadding*2
-	cardH := thumbH + thumbnailPadding*2 + closeBtnSize
-	cardX := bounds.X + bounds.Width - cardW - thumbnailPadding
-	cardY := bounds.Y + bounds.Height - cardH - thumbnailPadding
-
-	// Draw card background.
-	cardBg, _ := walk.NewSolidColorBrush(walk.RGB(40, 42, 48))
-	defer cardBg.Dispose()
-	cardRect := walk.Rectangle{X: cardX, Y: cardY, Width: cardW, Height: cardH}
-	if err := canvas.FillRectanglePixels(cardBg, cardRect); err != nil {
-		return err
+func (app *viewerApp) paintThumbnailStrip(canvas *walk.Canvas, bounds walk.Rectangle, slots []imageSlot) error {
+	n := len(slots)
+	if n == 0 {
+		return nil
 	}
 
-	// Draw border.
+	cardBg, _ := walk.NewSolidColorBrush(walk.RGB(40, 42, 48))
+	if cardBg != nil {
+		defer cardBg.Dispose()
+	}
 	borderBrush, _ := walk.NewSolidColorBrush(walk.RGB(80, 82, 88))
-	defer borderBrush.Dispose()
-	topBorder := walk.Rectangle{X: cardX, Y: cardY, Width: cardW, Height: 1}
-	bottomBorder := walk.Rectangle{X: cardX, Y: cardY + cardH - 1, Width: cardW, Height: 1}
-	leftBorder := walk.Rectangle{X: cardX, Y: cardY, Width: 1, Height: cardH}
-	rightBorder := walk.Rectangle{X: cardX + cardW - 1, Y: cardY, Width: 1, Height: cardH}
-	_ = canvas.FillRectanglePixels(borderBrush, topBorder)
-	_ = canvas.FillRectanglePixels(borderBrush, bottomBorder)
-	_ = canvas.FillRectanglePixels(borderBrush, leftBorder)
-	_ = canvas.FillRectanglePixels(borderBrush, rightBorder)
-
-	// Draw thumbnail image.
-	thumbX := cardX + (cardW-thumbW)/2
-	thumbY := cardY + thumbnailPadding
-	thumbDst := walk.Rectangle{X: thumbX, Y: thumbY, Width: thumbW, Height: thumbH}
-	bmpSize := bmp.Size()
-	thumbSrc := walk.Rectangle{X: 0, Y: 0, Width: bmpSize.Width, Height: bmpSize.Height}
-	_ = canvas.DrawBitmapPartWithOpacityPixels(bmp, thumbDst, thumbSrc, 255)
-
-	// Draw close button [X] at top-right corner of card, styled like a standard title bar close button.
-	closeBtnX := cardX + cardW - closeBtnSize - 1
-	closeBtnY := cardY + 1
-	closeRect := walk.Rectangle{X: closeBtnX, Y: closeBtnY, Width: closeBtnSize, Height: closeBtnSize}
+	if borderBrush != nil {
+		defer borderBrush.Dispose()
+	}
 	closeBg, _ := walk.NewSolidColorBrush(walk.RGB(196, 43, 28))
-	defer closeBg.Dispose()
-	_ = canvas.FillRectanglePixels(closeBg, closeRect)
-
-	// Draw the "X" glyph using white lines.
+	if closeBg != nil {
+		defer closeBg.Dispose()
+	}
 	xPen, _ := walk.NewCosmeticPen(walk.PenSolid, walk.RGB(255, 255, 255))
-	defer xPen.Dispose()
-	m := 7 // margin inside the button for the X lines
-	_ = canvas.DrawLinePixels(xPen,
-		walk.Point{X: closeBtnX + m, Y: closeBtnY + m},
-		walk.Point{X: closeBtnX + closeBtnSize - m, Y: closeBtnY + closeBtnSize - m})
-	_ = canvas.DrawLinePixels(xPen,
-		walk.Point{X: closeBtnX + closeBtnSize - m, Y: closeBtnY + m},
-		walk.Point{X: closeBtnX + m, Y: closeBtnY + closeBtnSize - m})
+	if xPen != nil {
+		defer xPen.Dispose()
+	}
 
-	// Store close button rect for click detection.
+	// Calculate scale factor based on available space.
+	// Natural cards: thumbW + 2*pad, spacing between cards: pad.
+	// Total space needed = sum of (thumbW + 2*pad) + (n-1)*pad
+	// First, estimate with max sizes.
+	naturalCardW := thumbnailMaxW + 2*thumbnailPad
+	estimatedTotalW := n*naturalCardW + (n-1)*thumbnailPad
+	availW := bounds.Width - 2*thumbnailPad // Leave padding on edges
+
+	scaleFactor := 1.0
+	if estimatedTotalW > availW {
+		// Need to scale down; preserve at least min width.
+		minCardW := thumbnailMinW + 2*thumbnailPad
+		maxTotalW := n*minCardW + (n-1)*thumbnailPad
+		if maxTotalW <= availW {
+			// Can scale linearly.
+			scaleFactor = float64(availW-(n-1)*thumbnailPad) / float64(n*naturalCardW)
+			if scaleFactor > 1.0 {
+				scaleFactor = 1.0
+			}
+		} else {
+			// Even at min, doesn't fit. Use min and let cards overflow.
+			scaleFactor = float64(thumbnailMinW) / float64(thumbnailMaxW)
+		}
+	}
+
+	closeRects := make([]walk.Rectangle, n)
+	// Newest image is rightmost; each subsequent card steps left.
+	rightEdge := bounds.X + bounds.Width - thumbnailPad
+	for i := n - 1; i >= 0; i-- {
+		bmp := slots[i].walkBitmap
+		if bmp == nil {
+			continue
+		}
+		bmpSize := bmp.Size()
+		thumbW, thumbH := fitWindow(bmpSize.Width, bmpSize.Height, int(float64(thumbnailMaxW)*scaleFactor), int(float64(thumbnailMaxH)*scaleFactor))
+
+		cardW := thumbW + thumbnailPad*2
+		cardH := thumbH + thumbnailPad*2 + thumbnailCloseSz
+		cardX := rightEdge - cardW
+		cardY := bounds.Y + bounds.Height - cardH - thumbnailPad
+
+		// Card background.
+		if cardBg != nil {
+			_ = canvas.FillRectanglePixels(cardBg, walk.Rectangle{X: cardX, Y: cardY, Width: cardW, Height: cardH})
+		}
+		// Border.
+		if borderBrush != nil {
+			_ = canvas.FillRectanglePixels(borderBrush, walk.Rectangle{X: cardX, Y: cardY, Width: cardW, Height: 1})
+			_ = canvas.FillRectanglePixels(borderBrush, walk.Rectangle{X: cardX, Y: cardY + cardH - 1, Width: cardW, Height: 1})
+			_ = canvas.FillRectanglePixels(borderBrush, walk.Rectangle{X: cardX, Y: cardY, Width: 1, Height: cardH})
+			_ = canvas.FillRectanglePixels(borderBrush, walk.Rectangle{X: cardX + cardW - 1, Y: cardY, Width: 1, Height: cardH})
+		}
+
+		// Thumbnail image.
+		imgDst := fitRect(
+			walk.Size{Width: bmpSize.Width, Height: bmpSize.Height},
+			walk.Rectangle{X: cardX + thumbnailPad, Y: cardY + thumbnailCloseSz, Width: thumbW, Height: thumbH},
+		)
+		src := walk.Rectangle{X: 0, Y: 0, Width: bmpSize.Width, Height: bmpSize.Height}
+		_ = canvas.DrawBitmapPartWithOpacityPixels(bmp, imgDst, src, 255)
+
+		// Close button in the top-right corner of the card.
+		closeX := cardX + cardW - thumbnailCloseSz - 1
+		closeRect := walk.Rectangle{X: closeX, Y: cardY + 1, Width: thumbnailCloseSz, Height: thumbnailCloseSz}
+		if closeBg != nil {
+			_ = canvas.FillRectanglePixels(closeBg, closeRect)
+		}
+		if xPen != nil {
+			const m = 3
+			_ = canvas.DrawLinePixels(xPen,
+				walk.Point{X: closeX + m, Y: cardY + 1 + m},
+				walk.Point{X: closeX + thumbnailCloseSz - m, Y: cardY + 1 + thumbnailCloseSz - m})
+			_ = canvas.DrawLinePixels(xPen,
+				walk.Point{X: closeX + thumbnailCloseSz - m, Y: cardY + 1 + m},
+				walk.Point{X: closeX + m, Y: cardY + 1 + thumbnailCloseSz - m})
+		}
+		closeRects[i] = closeRect
+
+		// Step left for the next (older) card.
+		rightEdge = cardX - thumbnailPad
+	}
+
 	app.stateMu.Lock()
-	app.closeBtnRect = closeRect
+	app.thumbCloseRects = closeRects
 	app.stateMu.Unlock()
-
 	return nil
 }
 
@@ -1051,6 +1127,105 @@ func (app *viewerApp) enableFileDrop() {
 		}))
 }
 
+func gridFor(n int) (cols, rows int) {
+	switch {
+	case n <= 1:
+		return 1, 1
+	case n <= 2:
+		return 2, 1
+	case n <= 4:
+		return 2, 2
+	case n <= 6:
+		return 3, 2
+	case n <= 8:
+		return 4, 2
+	default:
+		return 3, 3
+	}
+}
+
+func (app *viewerApp) addImage(img image.Image, origW, origH int, fileName string) {
+	app.stateMu.RLock()
+	dispBounds := app.displays[app.displayIndex].bounds
+	app.stateMu.RUnlock()
+
+	scaled := downsampleImage(img, dispBounds.Dx(), dispBounds.Dy())
+	img = nil
+
+	bmp, err := walk.NewBitmapFromImage(scaled)
+	if err != nil {
+		app.setStatusText(fmt.Sprintf("Failed to create bitmap: %v", err))
+		return
+	}
+
+	hBmp := createHBitmapFromImage(scaled)
+	slot := imageSlot{
+		walkBitmap: bmp,
+		origSize:   walk.Size{Width: origW, Height: origH},
+		fileName:   fileName,
+		hBmp:       hBmp,
+		imgW:       scaled.Bounds().Dx(),
+		imgH:       scaled.Bounds().Dy(),
+	}
+
+	var toDispose []imageSlot
+	app.stateMu.Lock()
+	if !app.allowMultipleImages {
+		// Single-image mode: replace all existing slots.
+		toDispose = append(toDispose, app.imageSlots...)
+		app.imageSlots = nil
+	} else {
+		// Multi-image mode: check for duplicate and remove old copy if found.
+		for i, existing := range app.imageSlots {
+			if existing.fileName == fileName {
+				toDispose = append(toDispose, existing)
+				app.imageSlots = append(app.imageSlots[:i], app.imageSlots[i+1:]...)
+				break
+			}
+		}
+		// Evict oldest if at capacity.
+		if len(app.imageSlots) >= maxImages {
+			toDispose = append(toDispose, app.imageSlots[0])
+			app.imageSlots = app.imageSlots[1:]
+		}
+	}
+	app.imageSlots = append(app.imageSlots, slot)
+	count := len(app.imageSlots)
+	app.stateMu.Unlock()
+
+	for i := range toDispose {
+		toDispose[i].dispose()
+	}
+
+	app.refreshImageViewer()
+	_ = app.preview.Invalidate()
+	app.setStatusText(fmt.Sprintf("Showing %d image(s) on display", count))
+}
+
+func (app *viewerApp) refreshImageViewer() {
+	app.stateMu.Lock()
+	oldHwnd := app.imageViewerHwnd
+	oldWndProc := app.imageWndProc
+	app.imageViewerHwnd = 0
+	app.imageWndProc = 0
+	app.stateMu.Unlock()
+	_ = oldWndProc // keep callback func alive until after DestroyWindow
+
+	if oldHwnd != 0 {
+		win.DestroyWindow(oldHwnd)
+	}
+
+	app.stateMu.RLock()
+	slotCount := len(app.imageSlots)
+	app.stateMu.RUnlock()
+	if slotCount == 0 {
+		app.captureSoon()
+		return
+	}
+
+	app.showImagesOnDisplay()
+}
+
 func (app *viewerApp) handleDropFiles(hDrop win.HDROP) {
 	defer win.DragFinish(hDrop)
 
@@ -1078,41 +1253,17 @@ func (app *viewerApp) handleDropFiles(hDrop win.HDROP) {
 		return
 	}
 
-	origW := img.Bounds().Dx()
-	origH := img.Bounds().Dy()
-
-	// Downsample to target display resolution.
-	app.stateMu.RLock()
-	dispBounds := app.displays[app.displayIndex].bounds
-	app.stateMu.RUnlock()
-	scaled := downsampleImage(img, dispBounds.Dx(), dispBounds.Dy())
-	img = nil
-
-	bmp, err := walk.NewBitmapFromImage(scaled)
-	if err != nil {
-		app.setStatusText(fmt.Sprintf("Failed to create bitmap: %v", err))
-		return
-	}
-
-	app.closeImageViewer()
-
-	app.stateMu.Lock()
-	app.imageBitmap = bmp
-	app.imageSize = walk.Size{Width: origW, Height: origH}
-	app.imageFileName = filepath.Base(filePath)
-	app.stateMu.Unlock()
-
-	app.showImageOnDisplay(scaled)
-	_ = app.preview.Invalidate()
-	app.setStatusText(fmt.Sprintf("Showing %s on display", app.imageFileName))
+	app.addImage(img, img.Bounds().Dx(), img.Bounds().Dy(), filepath.Base(filePath))
 }
 
-// showImageOnDisplay creates a borderless fullscreen window on the target
-// monitor and paints the image centered/scaled to fit.
-func (app *viewerApp) showImageOnDisplay(img image.Image) {
+// showImagesOnDisplay creates a borderless fullscreen window on the target
+// monitor and tiles all active image slots in a grid.
+func (app *viewerApp) showImagesOnDisplay() {
 	app.stateMu.RLock()
 	targetDisplayIndex := app.displayIndex
 	display := app.displays[targetDisplayIndex]
+	slots := make([]imageSlot, len(app.imageSlots))
+	copy(slots, app.imageSlots)
 	app.stateMu.RUnlock()
 
 	bounds := display.bounds
@@ -1138,30 +1289,22 @@ func (app *viewerApp) showImageOnDisplay(img image.Image) {
 	app.imageDisplayIndex = targetDisplayIndex
 	app.stateMu.Unlock()
 
-	// Raise above regular windows once, without making it permanently topmost.
-	win.SetWindowPos(hwnd, win.HWND_TOP, 0, 0, 0, 0,
-		win.SWP_NOMOVE|win.SWP_NOSIZE)
+	win.SetWindowPos(hwnd, win.HWND_TOP, 0, 0, 0, 0, win.SWP_NOMOVE|win.SWP_NOSIZE)
 	win.SetForegroundWindow(hwnd)
 	win.SetFocus(hwnd)
 
-	// Create a GDI bitmap for direct painting via StretchBlt.
-	hBmp := createHBitmapFromImage(img)
-	imgW := img.Bounds().Dx()
-	imgH := img.Bounds().Dy()
 	dispW := bounds.Dx()
 	dispH := bounds.Dy()
-
+	n := len(slots)
 	procFillRect := syscall.NewLazyDLL("user32.dll").NewProc("FillRect")
 
 	var origStaticProc uintptr
 	imageWndProc := syscall.NewCallback(func(h win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 		switch msg {
 		case win.WM_NCHITTEST:
-			// Keep input on this fullscreen window (do not pass through).
 			return uintptr(win.HTCLIENT)
 
 		case win.WM_ERASEBKGND:
-			// We paint the full surface in WM_PAINT.
 			return 1
 
 		case win.WM_PAINT:
@@ -1171,24 +1314,28 @@ func (app *viewerApp) showImageOnDisplay(img image.Image) {
 				return 0
 			}
 
-			// Fill background black.
 			blackBrush := win.HBRUSH(win.GetStockObject(win.BLACK_BRUSH))
 			bgRect := &win.RECT{Left: 0, Top: 0, Right: int32(dispW), Bottom: int32(dispH)}
 			procFillRect.Call(uintptr(hdc), uintptr(unsafe.Pointer(bgRect)), uintptr(blackBrush))
 
-			// Draw image scaled to fit using StretchBlt.
-			if hBmp != 0 {
-				dst := fitRect(
-					walk.Size{Width: imgW, Height: imgH},
-					walk.Rectangle{X: 0, Y: 0, Width: dispW, Height: dispH},
-				)
+			cols, rows := gridFor(n)
+			cellW := dispW / cols
+			cellH := dispH / rows
+			for i := 0; i < n; i++ {
+				if slots[i].hBmp == 0 {
+					continue
+				}
+				col := i % cols
+				row := i / cols
+				cellRect := walk.Rectangle{X: col * cellW, Y: row * cellH, Width: cellW, Height: cellH}
+				dst := fitRect(walk.Size{Width: slots[i].imgW, Height: slots[i].imgH}, cellRect)
 				hdcMem := win.CreateCompatibleDC(hdc)
-				oldObj := win.SelectObject(hdcMem, win.HGDIOBJ(hBmp))
+				oldObj := win.SelectObject(hdcMem, win.HGDIOBJ(slots[i].hBmp))
 				win.SetStretchBltMode(hdc, win.HALFTONE)
 				win.StretchBlt(hdc,
 					int32(dst.X), int32(dst.Y), int32(dst.Width), int32(dst.Height),
 					hdcMem,
-					0, 0, int32(imgW), int32(imgH),
+					0, 0, int32(slots[i].imgW), int32(slots[i].imgH),
 					win.SRCCOPY)
 				win.SelectObject(hdcMem, oldObj)
 				win.DeleteDC(hdcMem)
@@ -1198,15 +1345,12 @@ func (app *viewerApp) showImageOnDisplay(img image.Image) {
 			return 0
 
 		case win.WM_LBUTTONDOWN, win.WM_RBUTTONDOWN, win.WM_MBUTTONDOWN, win.WM_KEYDOWN, win.WM_SYSKEYDOWN:
-			// Any click or keypress closes the viewer.
 			app.closeImageViewer()
 			_ = app.preview.Invalidate()
 			return 0
 
 		case win.WM_DESTROY:
-			if hBmp != 0 {
-				win.DeleteObject(win.HGDIOBJ(hBmp))
-			}
+			// HBITMAPs are owned by imageSlots, not this window.
 			return 0
 		}
 		return win.CallWindowProc(origStaticProc, h, msg, wParam, lParam)
@@ -1247,7 +1391,7 @@ func (app *viewerApp) startCursorTracking() {
 				visibilityChanged := app.cursorVisible != onDisplay
 				positionChanged := onDisplay && (app.cursorX != int(pt.X) || app.cursorY != int(pt.Y))
 				changed := visibilityChanged || positionChanged
-				hasImageThumbnail := app.imageBitmap != nil
+				hasImageThumbnail := len(app.imageSlots) > 0
 				app.cursorVisible = onDisplay
 				if onDisplay {
 					app.cursorX = int(pt.X)
@@ -1278,34 +1422,56 @@ func (app *viewerApp) closeImageViewer() {
 	app.imageViewerHwnd = 0
 	app.imageWndProc = 0
 	app.imageDisplayIndex = -1
-	bmp := app.imageBitmap
-	app.imageBitmap = nil
-	app.imageSize = walk.Size{}
-	app.imageFileName = ""
-	app.closeBtnRect = walk.Rectangle{}
+	slots := app.imageSlots
+	app.imageSlots = nil
+	app.thumbCloseRects = nil
 	app.stateMu.Unlock()
 
 	if hwnd != 0 {
 		win.DestroyWindow(hwnd)
 	}
-	if bmp != nil {
-		bmp.Dispose()
+	for i := range slots {
+		slots[i].dispose()
 	}
 	app.captureSoon()
 }
 
-func (app *viewerApp) handlePreviewClick(x, y int) {
-	app.stateMu.RLock()
-	r := app.closeBtnRect
-	app.stateMu.RUnlock()
-
-	if r.Width == 0 {
+func (app *viewerApp) removeImageAt(idx int) {
+	app.stateMu.Lock()
+	if idx < 0 || idx >= len(app.imageSlots) {
+		app.stateMu.Unlock()
 		return
 	}
-	if x >= r.X && x <= r.X+r.Width && y >= r.Y && y <= r.Y+r.Height {
+	slot := app.imageSlots[idx]
+	app.imageSlots = append(app.imageSlots[:idx], app.imageSlots[idx+1:]...)
+	count := len(app.imageSlots)
+	app.stateMu.Unlock()
+
+	slot.dispose()
+	if count == 0 {
 		app.closeImageViewer()
-		_ = app.preview.Invalidate()
+	} else {
+		app.refreshImageViewer()
+	}
+	_ = app.preview.Invalidate()
+	if count == 0 {
 		app.setStatusText("Image viewer closed")
+	} else {
+		app.setStatusText(fmt.Sprintf("Showing %d image(s) on display", count))
+	}
+}
+
+func (app *viewerApp) handlePreviewClick(x, y int) {
+	app.stateMu.RLock()
+	rects := make([]walk.Rectangle, len(app.thumbCloseRects))
+	copy(rects, app.thumbCloseRects)
+	app.stateMu.RUnlock()
+
+	for i, r := range rects {
+		if r.Width > 0 && x >= r.X && x < r.X+r.Width && y >= r.Y && y < r.Y+r.Height {
+			app.removeImageAt(i)
+			return
+		}
 	}
 }
 

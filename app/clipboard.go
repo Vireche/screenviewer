@@ -6,7 +6,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/lxn/walk"
 	"github.com/lxn/win"
 )
 
@@ -34,32 +33,7 @@ func (app *viewerApp) pasteFromClipboard() {
 		return
 	}
 
-	origW := img.Bounds().Dx()
-	origH := img.Bounds().Dy()
-
-	app.stateMu.RLock()
-	dispBounds := app.displays[app.displayIndex].bounds
-	app.stateMu.RUnlock()
-	scaled := downsampleImage(img, dispBounds.Dx(), dispBounds.Dy())
-	img = nil
-
-	bmp, err := walk.NewBitmapFromImage(scaled)
-	if err != nil {
-		app.setStatusText(fmt.Sprintf("Paste bitmap failed: %v", err))
-		return
-	}
-
-	app.closeImageViewer()
-
-	app.stateMu.Lock()
-	app.imageBitmap = bmp
-	app.imageSize = walk.Size{Width: origW, Height: origH}
-	app.imageFileName = "(pasted image)"
-	app.stateMu.Unlock()
-
-	app.showImageOnDisplay(scaled)
-	_ = app.preview.Invalidate()
-	app.setStatusText(fmt.Sprintf("Showing pasted image (%dx%d) on display", origW, origH))
+	app.addImage(img, img.Bounds().Dx(), img.Bounds().Dy(), "(pasted image)")
 }
 
 func imageFromClipboard(hwnd win.HWND) (image.Image, error) {
