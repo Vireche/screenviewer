@@ -13,6 +13,7 @@ I created this for personal use, I play table top RPGs like Pathfinder and D&D. 
 - Supports dropping image files onto the control window to show them fullscreen on the selected display.
 - Supports pasting an image from the clipboard (`Ctrl+V`) to show it fullscreen on the selected display.
 - Includes a toggleable Image Browser panel for selecting and launching images from a folder.
+- Has an optional chrome extension that add a Send to ScreenViewer context menu option.
 
 ## Menus And Controls
 
