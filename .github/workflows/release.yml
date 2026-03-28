@@ -25,10 +25,12 @@ jobs:
         run: ./build.bat
         shell: cmd
 
-      - name: Create Release and upload EXE
+      - name: Create Release and upload artifacts
         uses: softprops/action-gh-release@v2
         with:
-          files: screenviewer.exe
+          files: |
+            screenviewer.exe
+            screenviewer-extension.zip
           generate_release_notes: true   # Optional: auto-generates notes from commits
           draft: false
           prerelease: false

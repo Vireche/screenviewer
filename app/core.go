@@ -125,6 +125,8 @@ func Run() {
 
 	app.startCaptureLoop()
 	app.startCursorTracking()
+	app.installMoveHook()
+	app.startHTTPServer()
 	app.captureSoon()
 	app.mainWindow.SetVisible(true)
 	app.mainWindow.Run()
@@ -461,6 +463,35 @@ func (app *viewerApp) startCaptureLoop() {
 			}
 		}
 	}()
+}
+
+// installMoveHook installs a system-wide WinEvent hook that fires when any
+// window finishes being moved or resized. At that point we clear the saved
+// frame signature so the very next capture is presented unconditionally,
+// flushing any DWM ghost left on the monitored display.
+func (app *viewerApp) installMoveHook() {
+	const (
+		eventMoveSizeEnd  = 0x000B // EVENT_SYSTEM_MOVESIZEEND
+		wineventOutofcontext = 0x0000
+	)
+	user32 := syscall.NewLazyDLL("user32.dll")
+	procSetWinEventHook := user32.NewProc("SetWinEventHook")
+
+	cb := syscall.NewCallback(func(hWinEventHook, event, hwnd, idObject, idChild, dwEventThread, dwmsEventTime uintptr) uintptr {
+		app.stateMu.Lock()
+		app.haveFrameSig = false
+		app.stateMu.Unlock()
+		app.captureSoon()
+		return 0
+	})
+
+	procSetWinEventHook.Call(
+		eventMoveSizeEnd, eventMoveSizeEnd,
+		0, cb, 0, 0,
+		wineventOutofcontext,
+	)
+	// Intentionally leaking the hook handle — it lives for the duration of the
+	// process, and Walk/Win32 message dispatch will deliver the events.
 }
 
 func (app *viewerApp) captureSoon() {

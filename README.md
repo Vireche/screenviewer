@@ -21,6 +21,11 @@ go run .
 build.bat
 ```
 
+This produces two artifacts:
+
+- `screenviewer.exe` — the main application
+- `screenviewer-extension.zip` — the Chrome extension (see [Chrome Extension](#chrome-extension) below)
+
 ## What It Does
 
 - Captures the selected display continuously and shows an aspect-correct live preview.
@@ -50,11 +55,12 @@ build.bat
 
 ## Ways To Show An Image Fullscreen
 
-You can place an image on the selected display in three ways:
+You can place an image on the selected display in four ways:
 
 1. Drag an image file onto the main Screen Viewer window.
 2. Open `View > Image browser`, choose a folder, then single-click an image in the list.
 3. Copy an image from another app and press `Ctrl+V` (or use `Edit > Paste`).
+4. Right-click any image in Google Chrome and select **Send to ScreenViewer** (requires the Chrome extension — see [Chrome Extension](#chrome-extension)).
 
 Supported file extensions for drag/browser are:
 
@@ -89,6 +95,35 @@ Supported file extensions for drag/browser are:
 - "Browse Folder..." opens a folder picker.
 - Lists detected image files in that folder.
 - Single-clicking an item immediately opens it fullscreen on the selected display.
+
+## Chrome Extension
+
+ScreenViewer includes a Chrome extension that adds a **Send to ScreenViewer** option to the browser's right-click context menu for images.
+
+### Installation
+
+1. Download `screenviewer-extension.zip` from the [latest release](../../releases/latest) on GitHub.
+2. Unzip it to a permanent folder (e.g. `C:\Tools\screenviewer-extension\`). Chrome loads the extension directly from this folder, so don't delete it after installing.
+3. Open Chrome and go to `chrome://extensions/`.
+4. Enable **Developer mode** using the toggle in the top-right corner.
+5. Click **Load unpacked** and select the folder you unzipped in step 2.
+
+The extension is now installed. To update, download the new zip from the release page, overwrite the files in your folder, and click the refresh icon on the extension card in `chrome://extensions/`.
+
+### Usage
+
+1. Start ScreenViewer
+2. Right-click any image on a web page.
+3. Select **Send to ScreenViewer** from the context menu.
+4. The image appears on the selected display immediately.
+
+The extension icon shows a green **✓** on success or a red **✗** on failure. Check the extension's service worker console (`chrome://extensions/` → Details → Inspect views: service worker) for error details.
+
+### Notes
+
+- ScreenViewer must be running before you send an image.
+- The image observes the same single/multi-image mode setting as any other add method.
+- If port 8765 is already in use by another application, change `const httpPort` in `app/http.go` and `const SCREENVIEWER_PORT` in `chrome-extension/background.js` to match.
 
 ## Native Resource Notes
 

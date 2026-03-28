@@ -1,0 +1,19 @@
+{
+    "manifest_version": 3,
+    "name": "ScreenViewer Image Sender",
+    "version": "1.0.0",
+    "description": "Right-click on images to send them to ScreenViewer",
+    "permissions": [
+        "contextMenus",
+        "tabs"
+    ],
+    "host_permissions": [
+        "http://localhost:*/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_title": "ScreenViewer Image Sender"
+    }
+}
