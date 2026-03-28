@@ -4,28 +4,6 @@ Screen Viewer is a Windows desktop tool (Go + Walk) that mirrors one monitor ins
 
 I created this for personal use, I play table top RPGs like Pathfinder and D&D.  I have a monitor facing the players and show pictures of the NPCs, monsters and other notable things on the second monitor, but since I couldn't see the monitor I ended up dragging pictures to somewhere I can't see or creating a power point and using it to display the images.  This was all a bit clunky so I wrote this app.
 
-## Requirements
-
-- Windows with at least two active displays
-- Go 1.24+
-
-## Run
-
-```powershell
-go run .
-```
-
-## Build
-
-```powershell
-build.bat
-```
-
-This produces two artifacts:
-
-- `screenviewer.exe` — the main application
-- `screenviewer-extension.zip` — the Chrome extension (see [Chrome Extension](#chrome-extension) below)
-
 ## What It Does
 
 - Captures the selected display continuously and shows an aspect-correct live preview.
@@ -129,3 +107,25 @@ The extension icon shows a green **✓** on success or a red **✗** on failure.
 
 The Windows UI behavior depends on embedded resources in `resources/windows/screenviewer.manifest` and `resources/windows/rsrc.syso`.
 `build.bat` stages `rsrc.syso` into the module root for linking, builds `screenviewer.exe`, then removes the staged copy.
+
+## Requirements
+
+- Windows with at least two active displays
+- Go 1.24+
+
+## Run
+
+```powershell
+go run .
+```
+
+## Build
+
+```powershell
+build.bat
+```
+
+This produces two artifacts:
+
+- `screenviewer.exe` — the main application
+- `screenviewer-extension.zip` — the Chrome extension (see [Chrome Extension](#chrome-extension) above)
