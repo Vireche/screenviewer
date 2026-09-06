@@ -57,5 +57,5 @@ Name: "{autodesktop}\ScreenViewer"; Filename: "{app}\ScreenViewer.exe"; Tasks: d
 [Run]
 Filename: "{tmp}\WindowsAppRuntimeInstall-x64.exe"; Parameters: "--quiet"; Flags: waituntilterminated
 Filename: "chrome://extensions/"; Flags: shellexec postinstall skipifsilent; Tasks: chromeext
-Filename: "notepad.exe"; Parameters: "\"{localappdata}\ScreenViewer\chrome-extension\ChromeExtension-Install.txt\""; Flags: postinstall skipifsilent; Tasks: chromeext
+Filename: "{localappdata}\ScreenViewer\chrome-extension\ChromeExtension-Install.txt"; Flags: shellexec postinstall skipifsilent; Tasks: chromeext
 Filename: "{app}\ScreenViewer.exe"; Description: "Launch ScreenViewer"; Flags: nowait postinstall skipifsilent
