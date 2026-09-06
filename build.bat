@@ -14,9 +14,15 @@ set "EXT_DIR=%ROOT%chrome-extension"
 set "EXT_ZIP=%ROOT%screenviewer-extension.zip"
 set "APP_VERSION=0.0.0-local"
 set "INNO_COMPILER="
+set "APP_VERSION_SAFE=0.0.0"
 
 if not "%GITHUB_REF_NAME%"=="" set "APP_VERSION=%GITHUB_REF_NAME%"
 if /I "%APP_VERSION:~0,1%"=="v" set "APP_VERSION=%APP_VERSION:~1%"
+
+set "APP_VERSION_SAFE=%APP_VERSION%"
+for /f "tokens=1 delims=-+" %%A in ("%APP_VERSION_SAFE%") do set "APP_VERSION_SAFE=%%A"
+for /f "delims=0123456789." %%A in ("%APP_VERSION_SAFE%") do set "APP_VERSION_SAFE=0.0.0"
+if "%APP_VERSION_SAFE%"=="" set "APP_VERSION_SAFE=0.0.0"
 
 if exist "%PUBLISH_DIR%" rmdir /S /Q "%PUBLISH_DIR%"
 if exist "%SETUP_DIR%" rmdir /S /Q "%SETUP_DIR%"
@@ -59,7 +65,7 @@ if not defined INNO_COMPILER (
 
 if exist "%INSTALLER_EXE%" del /Q "%INSTALLER_EXE%"
 "%INNO_COMPILER%" /Qp ^
-  /DAppVersion="%APP_VERSION%" ^
+	/DAppVersion="%APP_VERSION_SAFE%" ^
   /DAppSource="%PUBLISH_DIR%" ^
   /DChromeExtSource="%EXT_DIR%" ^
   /DRuntimeInstaller="%RUNTIME_INSTALLER%" ^
