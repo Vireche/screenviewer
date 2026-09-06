@@ -1,6 +1,6 @@
 #define MyAppName "ScreenViewer"
 #ifndef AppVersion
-  #define AppVersion "0.0.0-local"
+  #define AppVersion "0.0.0"
 #endif
 
 #ifndef AppSource
@@ -48,7 +48,7 @@ Name: "chromeext"; Description: "Prepare Chrome extension files and open setup i
 Source: "{#AppSource}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: "{#RuntimeInstaller}"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{#ChromeExtSource}\*"; DestDir: "{localappdata}\ScreenViewer\chrome-extension"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: chromeext
-Source: "{src}\installer\ChromeExtension-Install.txt"; DestDir: "{localappdata}\ScreenViewer\chrome-extension"; Flags: ignoreversion; Tasks: chromeext
+Source: "ChromeExtension-Install.txt"; DestDir: "{localappdata}\ScreenViewer\chrome-extension"; Flags: ignoreversion; Tasks: chromeext
 
 [Icons]
 Name: "{autoprograms}\ScreenViewer"; Filename: "{app}\ScreenViewer.exe"

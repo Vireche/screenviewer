@@ -45,7 +45,7 @@ if errorlevel 1 (
 )
 
 powershell -NoProfile -Command ^
-  "Invoke-WebRequest -Uri '%RUNTIME_URL%' -OutFile '%RUNTIME_INSTALLER%'"
+  "$ProgressPreference='SilentlyContinue'; $ok=$false; for($i=1;$i -le 3;$i++){ try { Invoke-WebRequest -Uri '%RUNTIME_URL%' -OutFile '%RUNTIME_INSTALLER%'; $ok=$true; break } catch { if ($i -eq 3) { throw } Start-Sleep -Seconds 2 } }; if(-not $ok){ throw 'Download failed' }"
 if errorlevel 1 (
 	echo Failed to download Windows App Runtime installer
 	exit /b 1
@@ -64,7 +64,7 @@ if not defined INNO_COMPILER (
 )
 
 if exist "%INSTALLER_EXE%" del /Q "%INSTALLER_EXE%"
-"%INNO_COMPILER%" /Qp ^
+"%INNO_COMPILER%" ^
 	/DAppVersion="%APP_VERSION_SAFE%" ^
   /DAppSource="%PUBLISH_DIR%" ^
   /DChromeExtSource="%EXT_DIR%" ^
