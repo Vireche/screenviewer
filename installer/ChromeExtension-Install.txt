@@ -1,0 +1,10 @@
+ScreenViewer Chrome Extension Setup
+
+1. Open Chrome and go to chrome://extensions/
+2. Enable Developer mode (top-right)
+3. Click Load unpacked
+4. Select this folder:
+   %LOCALAPPDATA%\ScreenViewer\chrome-extension
+
+The extension adds a Send to ScreenViewer context menu item for images.
+If needed, edit background.js to change the port from 8765 and keep it in sync with the app.

@@ -1,6 +1,6 @@
 # <img src="resources/appicon.png" alt="Screen Viewer logo" width="28" valign="middle" /> Screen Viewer
 
-Screen Viewer is a Windows desktop tool (Go + Walk) that mirrors one monitor inside a resizable control window and can also throw still images fullscreen onto the selected display.
+Screen Viewer is a Windows desktop tool built with C# and WinUI 3 that mirrors one monitor inside a resizable control window and can also throw still images fullscreen onto the selected display.
 
 I created this for personal use, I play table top RPGs like Pathfinder and D&D.  I have a monitor facing the players and show pictures of the NPCs, monsters and other notable things on the second monitor, but since I couldn't see the monitor I ended up dragging pictures to somewhere I can't see or creating a power point and using it to display the images.  This was all a bit clunky so I wrote this app.
 
@@ -14,6 +14,8 @@ I created this for personal use, I play table top RPGs like Pathfinder and D&D. 
 - Supports pasting an image from the clipboard (`Ctrl+V`) to show it fullscreen on the selected display.
 - Includes a toggleable Image Browser panel for selecting and launching images from a folder.
 - Has an optional chrome extension that add a Send to ScreenViewer context menu option.
+
+The new C# rewrite lives under [src/ScreenViewer.WinUI3](src/ScreenViewer.WinUI3).
 
 ## Menus And Controls
 
@@ -102,22 +104,26 @@ The extension icon shows a green **✓** on success or a red **✗** on failure.
 
 - ScreenViewer must be running before you send an image.
 - The image observes the same single/multi-image mode setting as any other add method.
-- If port 8765 is already in use by another application, change `const httpPort` in `app/http.go` and `const SCREENVIEWER_PORT` in `chrome-extension/background.js` to match.
-
-## Native Resource Notes
-
-The Windows UI behavior depends on embedded resources in `resources/windows/screenviewer.manifest` and `resources/windows/rsrc.syso`.
-`build.bat` stages `rsrc.syso` into the module root for linking, builds `screenviewer.exe`, then removes the staged copy.
+- If port 8765 is already in use by another application, change `const SCREENVIEWER_PORT` in `chrome-extension/background.js` and the port in the C# upload server to match.
 
 ## Requirements
 
 - Windows with at least two active displays
-- Go 1.24+
+- For end users: use `screenviewer-setup.zip` from Releases (includes runtime installer)
+- For local development: .NET 10 SDK
+
+## End User Install
+
+1. Download `screenviewer-installer.exe` from the latest release.
+2. Run the installer.
+3. Optional: enable the `Prepare Chrome extension files and open setup instructions` checkbox during install.
+4. The installer installs/updates the Windows App Runtime, installs ScreenViewer, and can launch it after setup.
+5. If you enabled the Chrome extension option, Chrome extension instructions open automatically after install.
 
 ## Run
 
 ```powershell
-go run .
+dotnet run --project src/ScreenViewer.WinUI3/ScreenViewer.WinUI3.csproj
 ```
 
 ## Build
@@ -128,5 +134,6 @@ build.bat
 
 This produces two artifacts:
 
-- `screenviewer.exe` — the main application
+- `screenviewer-installer.exe` — Inno Setup installer with runtime prerequisite
+- `screenviewer-winui3.zip` — the published WinUI 3 app folder
 - `screenviewer-extension.zip` — the Chrome extension (see [Chrome Extension](#chrome-extension) above)

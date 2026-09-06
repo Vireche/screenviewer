@@ -1,0 +1,16 @@
+<Window
+    x:Class="ScreenViewer.WinUI3.Views.FullscreenImageWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:ScreenViewer.WinUI3.Models"
+    xmlns:local="using:ScreenViewer.WinUI3.Views">
+    <Grid x:Name="RootGrid" Background="Black" Loaded="RootGrid_Loaded" PointerPressed="RootGrid_PointerPressed" KeyDown="RootGrid_KeyDown" TabFocusNavigation="Cycle">
+        <Grid x:Name="SingleImageHost" Visibility="Collapsed">
+            <Image x:Name="SingleImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
+
+        <ScrollViewer x:Name="MultiImageHost" Visibility="Collapsed">
+            <StackPanel x:Name="MultiImageStack" Orientation="Vertical" Spacing="12" Padding="12" />
+        </ScrollViewer>
+    </Grid>
+</Window>
