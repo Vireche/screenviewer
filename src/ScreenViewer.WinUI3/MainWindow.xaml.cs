@@ -386,14 +386,14 @@ public sealed partial class MainWindow : Window
 
     private void AlwaysOnTopMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var isChecked = AlwaysOnTopMenuItem.IsChecked;
+        var isChecked = AlwaysOnTopMenuItem.IsChecked == true;
         AlwaysOnTopToggle.IsChecked = isChecked;
         WindowingService.SetTopMost(this, isChecked);
     }
 
     private void AllowMultipleMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var isChecked = AllowMultipleMenuItem.IsChecked;
+        var isChecked = AllowMultipleMenuItem.IsChecked == true;
         AllowMultipleToggle.IsChecked = isChecked;
         viewModel.AllowMultipleImages = isChecked;
         if (!isChecked)

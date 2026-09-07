@@ -15,19 +15,15 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <MenuBar Grid.Row="0" Grid.ColumnSpan="2">
-            <MenuBarItem Title="File">
-                <MenuFlyoutItem Text="Exit" Click="Exit_Click" />
-            </MenuBarItem>
-            <MenuBarItem Title="Edit">
-                <MenuFlyoutItem Text="Paste" Click="Paste_Click" />
-            </MenuBarItem>
-            <MenuBarItem Title="View">
-                <ToggleMenuFlyoutItem x:Name="AlwaysOnTopMenuItem" Text="Always on top" Click="AlwaysOnTopMenuItem_Click" />
-                <ToggleMenuFlyoutItem x:Name="AllowMultipleMenuItem" Text="Allow multiple images" Click="AllowMultipleMenuItem_Click" />
-                <ToggleMenuFlyoutItem x:Name="BrowserMenuItem" Text="Image browser" Click="BrowserMenuItem_Click" />
-            </MenuBarItem>
-        </MenuBar>
+        <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#FF1A1D22" Padding="8">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Exit" Click="Exit_Click" Margin="0,0,8,0" />
+                <Button Content="Paste" Click="Paste_Click" Margin="0,0,16,0" />
+                <ToggleButton x:Name="AlwaysOnTopMenuItem" Content="Always on top" Click="AlwaysOnTopMenuItem_Click" Margin="0,0,8,0" />
+                <ToggleButton x:Name="AllowMultipleMenuItem" Content="Allow multiple images" Click="AllowMultipleMenuItem_Click" Margin="0,0,8,0" />
+                <ToggleButton x:Name="BrowserMenuItem" Content="Image browser" Click="BrowserMenuItem_Click" />
+            </StackPanel>
+        </Border>
 
         <Border x:Name="BrowserPanel" Grid.Row="1" Grid.Column="0" Background="#FF11151A" BorderBrush="#FF252B33" BorderThickness="0,0,1,0" Padding="12">
             <StackPanel Spacing="8">
