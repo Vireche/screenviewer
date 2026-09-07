@@ -45,24 +45,35 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0" x:Name="BrowserPathBox" IsReadOnly="True" PlaceholderText="No folder selected" Foreground="#F2F4F8" Background="#FF1A1D22" BorderBrush="#FF3A404A" />
-                    <Button Grid.Column="1" Width="28" Height="28" Margin="8,0,1,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Click="CloseBrowserPanel_Click" Background="#FFD63A3A" BorderBrush="#FFFFFFFF" BorderThickness="1">
-                        <TextBlock Text="X" Foreground="#FFFFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Button>
+                    <TextBox Grid.Column="0" x:Name="BrowserPathBox" IsReadOnly="True" PlaceholderText="No folder selected" Foreground="#FFFFFFFF" Background="#FF1A1D22" BorderBrush="#FF3A404A">
+                        <TextBox.Resources>
+                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#FFFFFFFF" />
+                        </TextBox.Resources>
+                    </TextBox>
+                    <Button Grid.Column="1" Content="X" Width="28" Height="28" Margin="8,0,1,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Click="CloseBrowserPanel_Click" Foreground="#FFFFFFFF" Background="#FFD63A3A" BorderBrush="#FFFFFFFF" BorderThickness="1" FontWeight="Bold" FontSize="14" />
                 </Grid>
 
-                <TextBox Grid.Row="1" x:Name="FilterBox" PlaceholderText="Filter files" TextChanged="FilterBox_TextChanged" Margin="0,0,0,8" Foreground="#F2F4F8" Background="#FF1A1D22" BorderBrush="#FF3A404A" />
-                <ListView Grid.Row="2" x:Name="BrowserListView" ItemsSource="{Binding BrowserImages}" IsItemClickEnabled="True" ItemClick="BrowserListView_ItemClick" Background="#FF11151A" Foreground="#F2F4F8">
+                <TextBox Grid.Row="1" x:Name="FilterBox" PlaceholderText="Filter files" TextChanged="FilterBox_TextChanged" Margin="0,0,0,8" Foreground="#FFFFFFFF" Background="#FF1A1D22" BorderBrush="#FF3A404A">
+                    <TextBox.Resources>
+                        <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#FFFFFFFF" />
+                        <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#FFFFFFFF" />
+                        <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#FFFFFFFF" />
+                    </TextBox.Resources>
+                </TextBox>
+                <ListView Grid.Row="2" x:Name="BrowserListView" ItemsSource="{Binding BrowserImages}" IsItemClickEnabled="True" ItemClick="BrowserListView_ItemClick" Background="#FF11151A" Foreground="#FFFFFFFF" FontSize="12">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
-                            <Setter Property="MinHeight" Value="20" />
+                            <Setter Property="MinHeight" Value="18" />
                             <Setter Property="Padding" Value="0" />
                             <Setter Property="Margin" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                         </Style>
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding Title}" Foreground="#F2F4F8" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Padding="1,0,1,0" />
+                            <TextBlock Text="{Binding Title}" Foreground="#FFFFFFFF" FontSize="12" TextTrimming="CharacterEllipsis" Padding="0" Margin="0" />
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
