@@ -45,9 +45,25 @@ public sealed partial class MainWindow : Window
 
     private async void RootGrid_Loaded(object sender, RoutedEventArgs e)
     {
-        WindowingService.MoveAndResize(this, new Rectangle(100, 100, 1280, 760));
-        await uploadServer.StartAsync();
-        uploadServer.ImageReceivedAsync = HandleIncomingUploadAsync;
+        try
+        {
+            WindowingService.MoveAndResize(this, new Rectangle(100, 100, 1280, 760));
+        }
+        catch
+        {
+            // Some machines throw COM E_FAIL if the app window is not fully ready yet.
+        }
+
+        try
+        {
+            await uploadServer.StartAsync();
+            uploadServer.ImageReceivedAsync = HandleIncomingUploadAsync;
+        }
+        catch (Exception exception)
+        {
+            viewModel.StatusText = $"Upload server failed to start: {exception.Message}";
+            StatusTextBlock.Text = viewModel.StatusText;
+        }
 
         RefreshDisplays();
         SetBrowserPanelVisible(false);
@@ -86,6 +102,7 @@ public sealed partial class MainWindow : Window
         {
             var preview = await screenCaptureService.CaptureDisplayAsync(viewModel.SelectedDisplay);
             viewModel.PreviewImageSource = preview;
+            PreviewImage.Source = preview;
             UpdateStatus();
         }
         finally
