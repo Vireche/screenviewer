@@ -110,7 +110,7 @@ The extension icon shows a green **✓** on success or a red **✗** on failure.
 
 - Windows with at least two active displays
 - For end users: use `screenviewer-setup.zip` from Releases (includes runtime installer)
-- For local development: .NET 8 SDK
+- For local development: .NET 10 SDK
 
 ## End User Install
 
