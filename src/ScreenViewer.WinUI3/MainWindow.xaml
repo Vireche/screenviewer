@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Screen Viewer"
     >
-    <Grid x:Name="RootGrid" Loaded="RootGrid_Loaded" AllowDrop="True" DragOver="RootGrid_DragOver" Drop="RootGrid_Drop" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid x:Name="RootGrid" Loaded="RootGrid_Loaded" AllowDrop="True" DragOver="RootGrid_DragOver" Drop="RootGrid_Drop" Background="#FF101216">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -26,26 +26,26 @@
         </Border>
 
         <Border x:Name="BrowserPanel" Grid.Row="1" Grid.Column="0" Background="#FF11151A" BorderBrush="#FF252B33" BorderThickness="0,0,1,0" Padding="12">
-            <StackPanel Spacing="8">
-                <Button Content="Browse Folder..." Click="BrowseFolder_Click" />
-                <TextBox x:Name="FilterBox" PlaceholderText="Filter files..." TextChanged="FilterBox_TextChanged" />
+            <StackPanel>
+                <Button Content="Browse Folder..." Click="BrowseFolder_Click" Margin="0,0,0,8" />
+                <TextBox x:Name="FilterBox" PlaceholderText="Filter files..." TextChanged="FilterBox_TextChanged" Margin="0,0,0,8" />
                 <ListView x:Name="BrowserListView" ItemsSource="{Binding BrowserImages}" IsItemClickEnabled="True" ItemClick="BrowserListView_ItemClick" />
             </StackPanel>
         </Border>
 
         <Border Grid.Row="1" Grid.Column="1" Background="#FF0D0F12" Padding="12">
-            <Grid RowSpacing="10">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <ComboBox x:Name="DisplayComboBox" Width="260" DisplayMemberPath="Label" SelectionChanged="DisplayComboBox_SelectionChanged" ItemsSource="{Binding Displays}" />
-                    <ToggleButton x:Name="AlwaysOnTopToggle" Content="Always on top" Checked="AlwaysOnTopToggle_Checked" Unchecked="AlwaysOnTopToggle_Unchecked" />
-                    <ToggleButton x:Name="AllowMultipleToggle" Content="Allow multiple images" Checked="AllowMultipleToggle_Checked" Unchecked="AllowMultipleToggle_Unchecked" />
-                    <ToggleButton x:Name="BrowserToggle" Content="Image browser" Checked="BrowserToggle_Checked" Unchecked="BrowserToggle_Unchecked" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <ComboBox x:Name="DisplayComboBox" Width="260" DisplayMemberPath="Label" SelectionChanged="DisplayComboBox_SelectionChanged" ItemsSource="{Binding Displays}" Margin="0,0,12,0" />
+                    <ToggleButton x:Name="AlwaysOnTopToggle" Content="Always on top" Checked="AlwaysOnTopToggle_Checked" Unchecked="AlwaysOnTopToggle_Unchecked" Margin="0,0,12,0" />
+                    <ToggleButton x:Name="AllowMultipleToggle" Content="Allow multiple images" Checked="AllowMultipleToggle_Checked" Unchecked="AllowMultipleToggle_Unchecked" Margin="0,0,12,0" />
+                    <ToggleButton x:Name="BrowserToggle" Content="Image browser" Checked="BrowserToggle_Checked" Unchecked="BrowserToggle_Unchecked" Margin="0,0,12,0" />
                     <Button Content="Paste" Click="Paste_Click" />
                 </StackPanel>
 
@@ -57,7 +57,7 @@
                     <ItemsControl ItemsSource="{Binding ActiveImages}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12" />
                 </Grid>
 
-                <TextBlock x:Name="StatusTextBlock" Grid.Row="2" Text="Ready" Foreground="#D0D8E3" Opacity="0.8" />
+                <TextBlock x:Name="StatusTextBlock" Grid.Row="2" Text="Ready" Foreground="#D0D8E3" Opacity="0.8" Margin="0,10,0,0" />
             </Grid>
         </Border>
     </Grid>
