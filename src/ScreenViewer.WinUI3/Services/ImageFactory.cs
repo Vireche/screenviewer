@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml.Media.Imaging;
 using ScreenViewer.WinUI3.Models;
 using Windows.Storage.Streams;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace ScreenViewer.WinUI3.Services;
 
@@ -28,12 +29,7 @@ public sealed class ImageFactory
     public static async Task<BitmapImage> CreateBitmapImageAsync(byte[] bytes)
     {
         using var stream = new InMemoryRandomAccessStream();
-        using (var writer = new DataWriter(stream))
-        {
-            writer.WriteBytes(bytes);
-            await writer.StoreAsync();
-            await writer.FlushAsync();
-        }
+        await stream.WriteAsync(bytes.AsBuffer());
 
         stream.Seek(0);
         var image = new BitmapImage();

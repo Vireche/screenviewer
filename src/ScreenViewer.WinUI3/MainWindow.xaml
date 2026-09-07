@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Screen Viewer"
     >
-    <Grid x:Name="RootGrid" Loaded="RootGrid_Loaded" AllowDrop="True" DragOver="RootGrid_DragOver" Drop="RootGrid_Drop" Background="#FF101216">
+    <Grid x:Name="RootGrid" Loaded="RootGrid_Loaded" KeyDown="RootGrid_KeyDown" AllowDrop="True" DragOver="RootGrid_DragOver" Drop="RootGrid_Drop" Background="#FF101216">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -16,48 +16,85 @@
         </Grid.ColumnDefinitions>
 
         <Border Grid.Row="0" Grid.ColumnSpan="2" Background="#FF1A1D22" Padding="8">
-            <StackPanel Orientation="Horizontal">
-                <Button Content="Exit" Click="Exit_Click" Margin="0,0,8,0" />
-                <Button Content="Paste" Click="Paste_Click" Margin="0,0,16,0" />
-                <ToggleButton x:Name="AlwaysOnTopMenuItem" Content="Always on top" Click="AlwaysOnTopMenuItem_Click" Margin="0,0,8,0" />
-                <ToggleButton x:Name="AllowMultipleMenuItem" Content="Allow multiple images" Click="AllowMultipleMenuItem_Click" Margin="0,0,8,0" />
-                <ToggleButton x:Name="BrowserMenuItem" Content="Image browser" Click="BrowserMenuItem_Click" />
-            </StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Button x:Name="BrowseFilesButton" Content="Browse files" Click="BrowseFolder_Click" Margin="0,0,8,0" />
+                    <ToggleButton x:Name="AllowMultipleMenuItem" Content="Allow multiple images" Click="AllowMultipleMenuItem_Click" Margin="0,0,8,0" />
+                    <Button Content="Paste" Click="Paste_Click" Margin="0,0,16,0" />
+                </StackPanel>
+
+                <ComboBox Grid.Column="1" x:Name="DisplayComboBox" Width="260" DisplayMemberPath="Label" SelectionChanged="DisplayComboBox_SelectionChanged" ItemsSource="{Binding Displays}" HorizontalAlignment="Right" />
+            </Grid>
         </Border>
 
         <Border x:Name="BrowserPanel" Grid.Row="1" Grid.Column="0" Background="#FF11151A" BorderBrush="#FF252B33" BorderThickness="0,0,1,0" Padding="12">
-            <StackPanel>
-                <Button Content="Browse Folder..." Click="BrowseFolder_Click" Margin="0,0,0,8" />
-                <TextBox x:Name="FilterBox" PlaceholderText="Filter files..." TextChanged="FilterBox_TextChanged" Margin="0,0,0,8" />
-                <ListView x:Name="BrowserListView" ItemsSource="{Binding BrowserImages}" IsItemClickEnabled="True" ItemClick="BrowserListView_ItemClick" />
-            </StackPanel>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" x:Name="BrowserPathBox" IsReadOnly="True" PlaceholderText="No folder selected" Foreground="#F2F4F8" Background="#FF1A1D22" BorderBrush="#FF3A404A" />
+                    <Button Grid.Column="1" Width="28" Height="28" Margin="8,0,1,0" Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Click="CloseBrowserPanel_Click" Background="#FFD63A3A" BorderBrush="#FFFFFFFF" BorderThickness="1" Canvas.ZIndex="2">
+                        <TextBlock Text="X" Foreground="#FFFFFFFF" FontWeight="Bold" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
+
+                <TextBox Grid.Row="1" x:Name="FilterBox" PlaceholderText="Filter files..." TextChanged="FilterBox_TextChanged" Margin="0,0,0,8" Foreground="#F2F4F8" Background="#FF1A1D22" BorderBrush="#FF3A404A">
+                    <TextBox.Resources>
+                        <SolidColorBrush x:Key="TextControlForeground" Color="#FFF2F4F8" />
+                        <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#FFF2F4F8" />
+                        <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="#FFF2F4F8" />
+                        <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#FFAAB2BF" />
+                        <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#FFB7C0CC" />
+                        <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#FFB7C0CC" />
+                    </TextBox.Resources>
+                </TextBox>
+                <ListView Grid.Row="3" x:Name="BrowserListView" ItemsSource="{Binding BrowserImages}" IsItemClickEnabled="True" ItemClick="BrowserListView_ItemClick" Background="#FF11151A" Foreground="#F2F4F8">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="MinHeight" Value="24" />
+                            <Setter Property="Padding" Value="2,1,2,1" />
+                            <Setter Property="Margin" Value="0" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Title}" Foreground="#F2F4F8" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Padding="2,0,2,0" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
         </Border>
 
         <Border Grid.Row="1" Grid.Column="1" Background="#FF0D0F12" Padding="12">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                    <ComboBox x:Name="DisplayComboBox" Width="260" DisplayMemberPath="Label" SelectionChanged="DisplayComboBox_SelectionChanged" ItemsSource="{Binding Displays}" Margin="0,0,12,0" />
-                    <ToggleButton x:Name="AlwaysOnTopToggle" Content="Always on top" Checked="AlwaysOnTopToggle_Checked" Unchecked="AlwaysOnTopToggle_Unchecked" Margin="0,0,12,0" />
-                    <ToggleButton x:Name="AllowMultipleToggle" Content="Allow multiple images" Checked="AllowMultipleToggle_Checked" Unchecked="AllowMultipleToggle_Unchecked" Margin="0,0,12,0" />
-                    <ToggleButton x:Name="BrowserToggle" Content="Image browser" Checked="BrowserToggle_Checked" Unchecked="BrowserToggle_Unchecked" Margin="0,0,12,0" />
-                    <Button Content="Paste" Click="Paste_Click" />
-                </StackPanel>
-
-                <Grid Grid.Row="1">
+                <Grid>
                     <Border CornerRadius="10" Background="#FF050608" BorderBrush="#FF2B3138" BorderThickness="1">
                         <Image x:Name="PreviewImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
 
-                    <ItemsControl ItemsSource="{Binding ActiveImages}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12" />
+                    <Grid x:Name="ActiveImagesHost" Visibility="Collapsed" Margin="8" Canvas.ZIndex="2" />
                 </Grid>
 
-                <TextBlock x:Name="StatusTextBlock" Grid.Row="2" Text="Ready" Foreground="#D0D8E3" Opacity="0.8" Margin="0,10,0,0" />
+                <TextBlock x:Name="StatusTextBlock" Grid.Row="1" Text="Ready" Foreground="#D0D8E3" Opacity="0.8" Margin="0,10,0,0" />
             </Grid>
         </Border>
     </Grid>

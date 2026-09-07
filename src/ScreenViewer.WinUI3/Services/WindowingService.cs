@@ -17,7 +17,14 @@ public static class WindowingService
 
     public static void ApplyBorderless(Window window)
     {
-        _ = GetAppWindow(window);
+        var appWindow = GetAppWindow(window);
+        if (appWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.SetBorderAndTitleBar(false, false);
+            presenter.IsResizable = false;
+            presenter.IsMaximizable = false;
+            presenter.IsMinimizable = false;
+        }
     }
 
     public static void MoveAndResize(Window window, System.Drawing.Rectangle bounds)

@@ -9,8 +9,11 @@ using ScreenViewer.WinUI3.Views;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Windows.UI.Core;
 using WinRT.Interop;
-using System.Drawing;
+using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Media;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace ScreenViewer.WinUI3;
 
@@ -36,6 +39,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         RootGrid.DataContext = viewModel;
+        Closed += MainWindow_Closed;
         clipboardImageService = new ClipboardImageService(imageFactory);
         previewTimer = DispatcherQueue.CreateTimer();
         previewTimer.Interval = TimeSpan.FromMilliseconds(500);
@@ -162,6 +166,7 @@ public sealed partial class MainWindow : Window
         }
 
         viewModel.ActiveImages.Add(imageEntry);
+        TrimActiveImagesToLimit();
         await EnsureFullscreenWindowAsync();
         UpdatePresentation();
     }
@@ -207,8 +212,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        fullscreenWindow?.HideWindow();
-        fullscreenWindow = new FullscreenImageWindow();
+        if (fullscreenWindow is null)
+        {
+            fullscreenWindow = new FullscreenImageWindow();
+        }
+
         var display = viewModel.SelectedDisplay ?? viewModel.Displays.FirstOrDefault();
         if (display is null)
         {
@@ -219,13 +227,118 @@ public sealed partial class MainWindow : Window
         await Task.CompletedTask;
     }
 
+    private void TrimActiveImagesToLimit()
+    {
+        while (viewModel.ActiveImages.Count > MaxImages)
+        {
+            viewModel.ActiveImages.RemoveAt(0);
+        }
+    }
+
     private void UpdatePresentation()
     {
         _ = DispatcherQueue.EnqueueAsync(async () =>
         {
+            RenderMainActiveImages();
             await EnsureFullscreenWindowAsync();
             UpdateStatus();
         });
+    }
+
+    private void RenderMainActiveImages()
+    {
+        ActiveImagesHost.Children.Clear();
+        ActiveImagesHost.RowDefinitions.Clear();
+        ActiveImagesHost.ColumnDefinitions.Clear();
+
+        var count = viewModel.ActiveImages.Count;
+        if (count == 0)
+        {
+            ActiveImagesHost.Visibility = Visibility.Collapsed;
+            PreviewImage.Visibility = Visibility.Visible;
+            return;
+        }
+
+        ActiveImagesHost.Visibility = Visibility.Visible;
+        PreviewImage.Visibility = Visibility.Collapsed;
+
+        var (rows, columns) = GetTileGridSize(count);
+        for (var row = 0; row < rows; row++)
+        {
+            ActiveImagesHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var column = 0; column < columns; column++)
+        {
+            ActiveImagesHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var index = 0; index < count; index++)
+        {
+            var imageEntry = viewModel.ActiveImages[index];
+            var imageGrid = new Grid();
+            imageGrid.Children.Add(new Image
+            {
+                Source = imageEntry.Source,
+                Stretch = Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+            });
+
+            var closeButton = new Button
+            {
+                Width = 28,
+                Height = 28,
+                Margin = new Thickness(0, 0, 1, 0),
+                Padding = new Thickness(0),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 214, 58, 58)),
+                BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.White),
+                BorderThickness = new Thickness(1),
+                Tag = imageEntry,
+                Content = new TextBlock
+                {
+                    Text = "X",
+                    Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                    FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                    FontSize = 14,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                }
+            };
+
+            closeButton.Click += RemoveActiveImage_Click;
+            imageGrid.Children.Add(closeButton);
+
+            var tile = new Border
+            {
+                Margin = new Thickness(6),
+                Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 15, 18, 22)),
+                BorderBrush = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 43, 49, 56)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10),
+                Child = imageGrid,
+            };
+
+            Grid.SetRow(tile, index / columns);
+            Grid.SetColumn(tile, index % columns);
+            ActiveImagesHost.Children.Add(tile);
+        }
+    }
+
+    private static (int Rows, int Columns) GetTileGridSize(int count)
+    {
+        return count switch
+        {
+            <= 1 => (1, 1),
+            2 => (1, 2),
+            <= 4 => (2, 2),
+            _ => (3, 3),
+        };
     }
 
     private void SetBrowserPanelVisible(bool isVisible)
@@ -233,8 +346,6 @@ public sealed partial class MainWindow : Window
         browserPanelVisible = isVisible;
         BrowserPanel.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
         BrowserColumn.Width = isVisible ? new GridLength(280) : new GridLength(0);
-        BrowserToggle.IsChecked = isVisible;
-        BrowserMenuItem.IsChecked = isVisible;
     }
 
     private async Task RefreshBrowserImagesAsync()
@@ -271,8 +382,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        BrowserPathBox.Text = folder.Path;
         browserFiles.Clear();
         browserFiles.AddRange(imageLibraryService.EnumerateImageFiles(folder.Path));
+        SetBrowserPanelVisible(true);
         await RefreshBrowserImagesAsync();
         viewModel.StatusText = $"Loaded {viewModel.BrowserImages.Count} images from {folder.Path}";
         StatusTextBlock.Text = viewModel.StatusText;
@@ -301,11 +414,6 @@ public sealed partial class MainWindow : Window
         await ShowClipboardImageAsync();
     }
 
-    private void Exit_Click(object sender, RoutedEventArgs e)
-    {
-        Close();
-    }
-
     private async void RootGrid_Drop(object sender, DragEventArgs e)
     {
         if (!e.DataView.Contains(StandardDataFormats.StorageItems))
@@ -327,6 +435,29 @@ public sealed partial class MainWindow : Window
         e.AcceptedOperation = DataPackageOperation.Copy;
     }
 
+    private async void RootGrid_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.V)
+        {
+            return;
+        }
+
+        var focused = FocusManager.GetFocusedElement(this.Content.XamlRoot);
+        if (focused is TextBox)
+        {
+            return;
+        }
+
+        var controlState = InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control);
+        if ((controlState & CoreVirtualKeyStates.Down) == 0)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await ShowClipboardImageAsync();
+    }
+
     private async void DisplayComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (DisplayComboBox.SelectedItem is DisplayOption display)
@@ -337,64 +468,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void AlwaysOnTopToggle_Checked(object sender, RoutedEventArgs e)
-    {
-        viewModel.StatusText = viewModel.StatusText;
-        WindowingService.SetTopMost(this, true);
-        AlwaysOnTopMenuItem.IsChecked = true;
-    }
-
-    private void AlwaysOnTopToggle_Unchecked(object sender, RoutedEventArgs e)
-    {
-        WindowingService.SetTopMost(this, false);
-        AlwaysOnTopMenuItem.IsChecked = false;
-    }
-
-    private void AllowMultipleToggle_Checked(object sender, RoutedEventArgs e)
-    {
-        viewModel.AllowMultipleImages = true;
-        AllowMultipleMenuItem.IsChecked = true;
-        UpdatePresentation();
-    }
-
-    private void AllowMultipleToggle_Unchecked(object sender, RoutedEventArgs e)
-    {
-        viewModel.AllowMultipleImages = false;
-        AllowMultipleMenuItem.IsChecked = false;
-        while (viewModel.ActiveImages.Count > 1)
-        {
-            viewModel.ActiveImages.RemoveAt(0);
-        }
-
-        UpdatePresentation();
-    }
-
-    private void BrowserToggle_Checked(object sender, RoutedEventArgs e)
-    {
-        SetBrowserPanelVisible(true);
-    }
-
-    private void BrowserToggle_Unchecked(object sender, RoutedEventArgs e)
+    private void CloseBrowserPanel_Click(object sender, RoutedEventArgs e)
     {
         SetBrowserPanelVisible(false);
-    }
-
-    private void BrowserMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        SetBrowserPanelVisible(!browserPanelVisible);
-    }
-
-    private void AlwaysOnTopMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        var isChecked = AlwaysOnTopMenuItem.IsChecked == true;
-        AlwaysOnTopToggle.IsChecked = isChecked;
-        WindowingService.SetTopMost(this, isChecked);
     }
 
     private void AllowMultipleMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var isChecked = AllowMultipleMenuItem.IsChecked == true;
-        AllowMultipleToggle.IsChecked = isChecked;
         viewModel.AllowMultipleImages = isChecked;
         if (!isChecked)
         {
@@ -415,7 +496,21 @@ public sealed partial class MainWindow : Window
         }
 
         viewModel.ActiveImages.Remove(imageEntry);
+        TrimActiveImagesToLimit();
         await EnsureFullscreenWindowAsync();
         UpdateStatus();
+    }
+
+    private void MainWindow_Closed(object sender, WindowEventArgs args)
+    {
+        try
+        {
+            fullscreenWindow?.HideWindow();
+        }
+        catch
+        {
+        }
+
+        fullscreenWindow = null;
     }
 }

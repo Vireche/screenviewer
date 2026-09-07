@@ -3,7 +3,9 @@ using Microsoft.UI.Xaml.Input;
 using ScreenViewer.WinUI3.Models;
 using ScreenViewer.WinUI3.Services;
 using Microsoft.UI.Xaml.Controls;
-using System.Drawing;
+using System.Collections.Generic;
+using Microsoft.UI.Xaml.Media;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace ScreenViewer.WinUI3.Views;
 
@@ -31,11 +33,7 @@ public sealed partial class FullscreenImageWindow : Window
         {
             SingleImageHost.Visibility = Visibility.Collapsed;
             MultiImageHost.Visibility = Visibility.Visible;
-            MultiImageStack.Children.Clear();
-            foreach (var imageEntry in images)
-            {
-                MultiImageStack.Children.Add(CreateImageCard(imageEntry));
-            }
+            RenderImageTiles(images);
         }
         else
         {
@@ -53,24 +51,60 @@ public sealed partial class FullscreenImageWindow : Window
         Close();
     }
 
-    private static UIElement CreateImageCard(ImageEntry imageEntry)
+    private void RenderImageTiles(IReadOnlyList<ImageEntry> images)
     {
-        var border = new Border
-        {
-            Margin = new Thickness(12),
-            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12),
-            Child = new Microsoft.UI.Xaml.Controls.Image
-            {
-                Source = imageEntry.Source,
-                Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            }
-        };
+        MultiImageHost.Children.Clear();
+        MultiImageHost.RowDefinitions.Clear();
+        MultiImageHost.ColumnDefinitions.Clear();
 
-        return border;
+        var count = images.Count;
+        var (rows, columns) = GetTileGridSize(count);
+
+        for (var row = 0; row < rows; row++)
+        {
+            MultiImageHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var column = 0; column < columns; column++)
+        {
+            MultiImageHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        }
+
+        for (var index = 0; index < count; index++)
+        {
+            var imageEntry = images[index];
+            var tile = new Border
+            {
+                Margin = new Thickness(6),
+                Background = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 15, 18, 22)),
+                BorderBrush = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 43, 49, 56)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10),
+                Child = new Image
+                {
+                    Source = imageEntry.Source,
+                    Stretch = Stretch.Uniform,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                }
+            };
+
+            Grid.SetRow(tile, index / columns);
+            Grid.SetColumn(tile, index % columns);
+            MultiImageHost.Children.Add(tile);
+        }
+    }
+
+    private static (int Rows, int Columns) GetTileGridSize(int count)
+    {
+        return count switch
+        {
+            <= 1 => (1, 1),
+            2 => (1, 2),
+            <= 4 => (2, 2),
+            _ => (3, 3),
+        };
     }
 
     private void RootGrid_Loaded(object sender, RoutedEventArgs e)
@@ -78,13 +112,11 @@ public sealed partial class FullscreenImageWindow : Window
         RootGrid.Focus(FocusState.Programmatic);
     }
 
-    private void RootGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        HideWindow();
-    }
-
     private void RootGrid_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
-        HideWindow();
+        if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            HideWindow();
+        }
     }
 }
