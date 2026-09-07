@@ -27,6 +27,13 @@ if "%APP_VERSION_SAFE%"=="" set "APP_VERSION_SAFE=0.0.0"
 if exist "%PUBLISH_DIR%" rmdir /S /Q "%PUBLISH_DIR%"
 if exist "%SETUP_DIR%" rmdir /S /Q "%SETUP_DIR%"
 
+set "APP_DIR=%ROOT%src\ScreenViewer.WinUI3"
+if exist "%APP_DIR%\bin" rmdir /S /Q "%APP_DIR%\bin"
+if exist "%APP_DIR%\obj" rmdir /S /Q "%APP_DIR%\obj"
+
+dotnet clean "%APP_PROJECT%" -c Release -r win-x64
+if errorlevel 1 exit /b %ERRORLEVEL%
+
 dotnet publish "%APP_PROJECT%" -c Release -r win-x64 --self-contained false -o "%PUBLISH_DIR%"
 if errorlevel 1 exit /b %ERRORLEVEL%
 
