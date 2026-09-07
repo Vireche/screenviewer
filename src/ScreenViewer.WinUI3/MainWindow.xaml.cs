@@ -37,7 +37,16 @@ public sealed partial class MainWindow : Window
 
     public MainWindow()
     {
-        InitializeComponent();
+        try
+        {
+            InitializeComponent();
+        }
+        catch (Exception exception)
+        {
+            App.LogException("MainWindow.InitializeComponent", exception);
+            throw;
+        }
+
         RootGrid.DataContext = viewModel;
         Closed += MainWindow_Closed;
         clipboardImageService = new ClipboardImageService(imageFactory);

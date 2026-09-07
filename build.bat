@@ -15,6 +15,7 @@ set "EXT_ZIP=%ROOT%screenviewer-extension.zip"
 set "APP_VERSION=0.0.0-local"
 set "INNO_COMPILER="
 set "APP_VERSION_SAFE=0.0.0"
+set "BUILD_OUT_DIR="
 
 if not "%GITHUB_REF_NAME%"=="" set "APP_VERSION=%GITHUB_REF_NAME%"
 if /I "%APP_VERSION:~0,1%"=="v" set "APP_VERSION=%APP_VERSION:~1%"
@@ -36,6 +37,41 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 
 dotnet publish "%APP_PROJECT%" -c Release -r win-x64 --self-contained false -o "%PUBLISH_DIR%"
 if errorlevel 1 exit /b %ERRORLEVEL%
+
+for /f "delims=" %%D in ('dir /B /AD "%APP_DIR%\bin\Release\net*-windows10.0.19041.0" 2^>nul') do (
+	set "BUILD_OUT_DIR=%APP_DIR%\bin\Release\%%D\win-x64"
+)
+
+if not defined BUILD_OUT_DIR (
+	echo Failed to find build output directory for WinUI resources.
+	exit /b 1
+)
+
+if not exist "%BUILD_OUT_DIR%\ScreenViewer.pri" (
+	echo Missing ScreenViewer.pri in build output: %BUILD_OUT_DIR%
+	exit /b 1
+)
+
+copy /Y "%BUILD_OUT_DIR%\*.xbf" "%PUBLISH_DIR%\" >nul
+if errorlevel 1 (
+	echo Failed to copy root XBF resources to publish output.
+	exit /b 1
+)
+
+copy /Y "%BUILD_OUT_DIR%\*.pri" "%PUBLISH_DIR%\" >nul
+if errorlevel 1 (
+	echo Failed to copy PRI resources to publish output.
+	exit /b 1
+)
+
+if exist "%BUILD_OUT_DIR%\Views\*.xbf" (
+	if not exist "%PUBLISH_DIR%\Views" mkdir "%PUBLISH_DIR%\Views"
+	copy /Y "%BUILD_OUT_DIR%\Views\*.xbf" "%PUBLISH_DIR%\Views\" >nul
+	if errorlevel 1 (
+		echo Failed to copy view XBF resources to publish output.
+		exit /b 1
+	)
+)
 
 if exist "%APP_ZIP%" del /Q "%APP_ZIP%"
 powershell -NoProfile -Command ^
@@ -60,6 +96,7 @@ if errorlevel 1 (
 
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "INNO_COMPILER=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not defined INNO_COMPILER if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "INNO_COMPILER=%ProgramFiles%\Inno Setup 6\ISCC.exe"
+if not defined INNO_COMPILER if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set "INNO_COMPILER=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 if not defined INNO_COMPILER (
 	where /Q ISCC.exe
 	if not errorlevel 1 set "INNO_COMPILER=ISCC.exe"

@@ -35,7 +35,7 @@ public partial class App : Application
         ShowErrorBox("Unhandled startup error:\n\n" + e.Exception);
     }
 
-    private static void LogException(string source, Exception exception)
+    public static void LogException(string source, Exception exception)
     {
         try
         {
@@ -45,6 +45,7 @@ public partial class App : Application
             var text = new StringBuilder()
                 .AppendLine($"[{DateTimeOffset.Now:O}] {source}")
                 .AppendLine(exception.ToString())
+                .AppendLine(FormatExceptionChain(exception))
                 .AppendLine(new string('-', 80))
                 .ToString();
             File.AppendAllText(logPath, text);
@@ -52,6 +53,24 @@ public partial class App : Application
         catch
         {
         }
+    }
+
+    private static string FormatExceptionChain(Exception exception)
+    {
+        var builder = new StringBuilder();
+        var current = exception.InnerException;
+        var depth = 1;
+
+        while (current is not null)
+        {
+            builder.AppendLine($"InnerException {depth}: {current.GetType().FullName}");
+            builder.AppendLine(current.Message);
+            builder.AppendLine(current.StackTrace);
+            current = current.InnerException;
+            depth++;
+        }
+
+        return builder.ToString();
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
